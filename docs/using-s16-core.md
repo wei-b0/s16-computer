@@ -54,9 +54,19 @@ while cpu.state == State::Running {
 ```
 
 This between-steps hook is the entire device model: the core treats all 64 KB
-as plain memory, and hosts breathe life into the MMIO addresses. Whatever your
-host writes there, keep it deterministic if you care about matching on-chain
-execution.
+as plain memory, and hosts breathe life into the MMIO addresses. You usually
+don't do this by hand — the `s16-machine` crate packages the standard tick
+loop (INPUT/RNG/TICK each tick, budgeted CPU slice, STATUS update) with the
+device semantics pinned in specs/MEMORY_MAP.md:
+
+```rust
+let mut machine = s16_machine::Machine::new(seed);
+machine.tick(mem, key_bitmask, 10_000);   // one tick: devices + CPU slice
+```
+
+Drive `step` directly only when you need something nonstandard (tracers,
+custom devices). Either way, keep what you feed the registers deterministic if
+you care about matching on-chain execution.
 
 ## Handle every stop reason
 

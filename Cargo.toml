@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/s16-core", "crates/s16-emulator", "crates/s16-asm"]
+members = ["crates/s16-core", "crates/s16-machine", "crates/s16-emulator", "crates/s16-asm"]
 
 [workspace.package]
 version = "0.1.0"

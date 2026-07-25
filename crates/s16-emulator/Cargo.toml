@@ -6,4 +6,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+crossterm = "0.29.0"
 s16-core = { path = "../s16-core" }
+s16-machine = { version = "0.1.0", path = "../s16-machine" }

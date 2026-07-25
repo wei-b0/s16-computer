@@ -1,0 +1,19 @@
+; spin.s16 — a spinner at the center of the display, animated from TICK.
+; The first "machine loop" program: it never halts. It redraws every pass,
+; deriving the frame from the TICK register, exactly how a game paces itself.
+; Run with: cargo run -p s16-emulator -- --tui programs/spin.bin  (esc quits)
+
+        LDI  R5, #0xFF00     ; device registers
+
+loop:   LDW  R1, [R5+4]      ; TICK
+        SHRI R1, R1, #3      ; new frame every 8 ticks
+        ANDI R1, R1, #3      ; 4 frames: 0..3
+        LDI  R2, #frames
+        ADD  R2, R2, R1
+        LDB  R3, [R2]        ; frame character
+        ORI  R3, R3, #0x0A00 ; attribute 0x0A (green)
+        LDI  R4, #0xF3E8     ; cell (12,20): 0xF000 + (12*40+20)*2
+        STW  [R4], R3
+        JMP  loop
+
+frames: .ascii "|/-\\"

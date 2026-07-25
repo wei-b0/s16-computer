@@ -115,10 +115,19 @@ Writing a character to the top-left corner of the 40×25 display:
         HALT
 ```
 
-This runs today, and the write lands in framebuffer memory — but the emulator
-does not *render* the framebuffer yet, and INPUT/RNG/TICK are not fed by the
-emulator yet either. Device emulation is the next milestone; the addresses and
-formats in the memory map are what you'll program against when it lands.
+Run it with `--tui` and the `#` actually appears on screen:
+
+```sh
+cargo run -p s16-emulator -- --tui yourfile.bin     # esc quits
+```
+
+In `--tui` mode the emulator runs the full machine: the framebuffer renders
+each tick, the keyboard feeds `INPUT` (arrows/WASD = d-pad, Z = A, X = B,
+Enter = Start), and `RNG`/`TICK` update every tick. A program that never
+`HALT`s — reading input, redrawing, pacing itself on `TICK` — is a *machine
+loop*, and it's how games work here: see
+[programs/spin.s16](../programs/spin.s16) for the minimal example. In batch
+mode (no `--tui`) devices stay silent and only the CPU runs.
 
 ## Habits that pay off
 

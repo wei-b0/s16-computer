@@ -117,3 +117,30 @@ Consequences:
 
 - Code can be loaded at any 4-byte-aligned address
 - Computed jumps/jump tables go through JR
+
+## D011: Tick-Based Machine Loop
+
+Decision:
+The machine runs in ticks: service device registers, execute a budget of CPU instructions, update STATUS. The CPU itself has no notion of time or devices.
+
+Reason:
+One loop shape fits every host — emulator frame, Solana transaction — and keeps the CPU core pure. Polling devices once per tick is deterministic; interrupt-style delivery would not be (see D009).
+
+Consequences:
+
+- Programs poll INPUT/TICK; a game's speed derives from TICK, not instruction count
+- The instruction budget is the compute knob for on-chain execution
+- Device semantics live in s16-machine, shared by all hosts
+
+## D012: Per-Tick xorshift16 RNG
+
+Decision:
+RNG holds a value advanced once per machine tick by a 16-bit xorshift (`x^=x<<7; x^=x>>9; x^=x<<8`), seeded by the host; state never zero.
+
+Reason:
+"New value per read" cannot be expressed as plain memory (D007) — per-tick update can, and it is trivially reproducible on-chain. Xorshift is a few shifts and xors: cheap everywhere, full 65535 period, plenty for games.
+
+Consequences:
+
+- All RNG reads within one tick see the same value (mix with TICK or program state if more entropy is needed per tick)
+- Replays are exact given seed + inputs + budgets

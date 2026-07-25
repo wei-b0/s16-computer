@@ -67,5 +67,20 @@ data:   .word 100, 200, 300, 400, 500
 Reassemble and rerun — R0 is now `0x05DC` (1500). That's the whole loop:
 edit `.s16`, assemble, run, read registers.
 
+## 6. See the machine run
+
+Batch mode is the CPU alone. `--tui` runs the *machine* — display, keyboard,
+timers — in your terminal:
+
+```sh
+cargo run -p s16-asm -- programs/hello.s16
+cargo run -p s16-emulator -- --tui programs/hello.bin   # HELLO, S16! on screen
+cargo run -p s16-asm -- programs/spin.s16
+cargo run -p s16-emulator -- --tui programs/spin.bin    # animation from TICK
+```
+
+Esc quits. The status bar shows the tick count and CPU state; `--seed N` sets
+the RNG seed, `--budget N` the instructions per tick.
+
 Next: [writing-programs.md](writing-programs.md) to write your own program
 from scratch.

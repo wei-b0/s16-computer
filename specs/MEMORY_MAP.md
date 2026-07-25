@@ -48,13 +48,23 @@ All device registers are 16-bit and 2-byte aligned.
 
 | Address | Name | Access | Semantics |
 |---------|------|--------|-----------|
-| `0xFF00` | `INPUT` | R | Key state bitmask: bit 0 = Up, 1 = Down, 2 = Left, 3 = Right, 4 = A, 5 = B, 6 = Start, 7 = Select. 1 = held. Writes ignored. |
-| `0xFF02` | `RNG` | R | Each read returns the next 16-bit pseudorandom value. Deterministic seeded generator so on-chain execution is reproducible. *(v1 stub — algorithm and seeding defined in the emulator/Solana phase.)* |
-| `0xFF04` | `TICK` | R | 16-bit counter of elapsed ticks (frames / execution slices), wraps mod 0x10000. *(v1 stub — tick source defined per host: emulator frame vs. on-chain transaction.)* |
-| `0xFF06` | `STATUS` | R | Execution status: low byte = state (0 Running, 1 Halted, 2 DebugHalt, 3 Faulted), high byte = fault code. |
+| `0xFF00` | `INPUT` | R | Key state bitmask: bit 0 = Up, 1 = Down, 2 = Left, 3 = Right, 4 = A, 5 = B, 6 = Start, 7 = Select. 1 = held. Refreshed once per machine tick. |
+| `0xFF02` | `RNG` | R | 16-bit pseudorandom value, advanced **once per machine tick** (all reads within a tick see the same value). Generator: xorshift16 — `x ^= x<<7; x ^= x>>9; x ^= x<<8` — state never zero; seed chosen by the host at power-on (seed 0 is treated as 1). |
+| `0xFF04` | `TICK` | R | Machine tick counter: 0 on the first tick, +1 per tick, wraps mod 0x10000. |
+| `0xFF06` | `STATUS` | R | Execution status, written by the machine after each tick's CPU slice: low byte = state (0 Running, 1 Halted, 2 DebugHalt, 3 Faulted), high byte = fault code. |
 | `0xFF08–0xFFFF` | — | — | Reserved. Reads return 0; writes ignored. |
 
-How input events get *into* `INPUT` (transactions on-chain, keyboard in the emulator) is a host concern, outside the CPU spec.
+## Machine Tick
+
+The machine runs the CPU in **ticks** (implemented by `s16-machine`). Each tick:
+
+1. The machine writes the device registers: `INPUT` (host-provided key state), `RNG` (advanced once), `TICK` (current count).
+2. The CPU executes up to a host-chosen **budget** of instructions (or until it stops).
+3. The machine writes `STATUS` and increments the tick counter.
+
+Hosts map ticks to their own time base — the emulator runs one tick per rendered frame; the Solana host runs one (or more) per transaction. Device registers keep updating after the CPU stops, so renderers stay live. Determinism rule: given the same seed, per-tick inputs, and budgets, every host produces the identical machine state.
+
+How key events become the `INPUT` bitmask (keyboard in the emulator, transaction data on-chain) remains a host concern.
 
 ## Reset State
 
