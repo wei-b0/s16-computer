@@ -9,11 +9,14 @@ compiles to S16 assembly. Full grammar and semantics live in
 **s16c is a game language with hardware access available, not a hardware
 language you happen to write games in.** Almost everything below is written
 against small, explicitly imported standard libraries — `use screen;` gets
-you `put_cell`, `use input;` gets you `read_input` — not raw memory
-addresses. Nothing from a library is visible until you `use` it: this is
-deliberately C's `#include` model, not an always-there prelude, so a
-program's dependencies are visible in its own source. The raw addresses are
-still there if you ever need them (§
+you `screen::put`, `use input;` gets you `input::read` — not raw memory
+addresses. Nothing from a library is visible until you `use` it, and every
+call to it is written out in full: `screen::put(...)`, never a bare `put(...)`.
+This is deliberately C's `#include` model plus Rust's fully-qualified paths
+(`std::mem::swap(...)` needs no `use` either), not an always-there prelude
+and not a `use`-then-bare-name shortcut — so a program's dependencies are
+visible both in its `use` lines *and* at every call site that uses them. The
+raw addresses are still there if you ever need them (§
 [Advanced: talking to hardware directly](#advanced-talking-to-hardware-directly)),
 but you won't need them to make Pong.
 
@@ -34,26 +37,26 @@ on that in [Reading the generated assembly](#reading-the-generated-assembly).
 use screen;
 
 fn main() {
-    clear_screen();
-    put_cell(20, 12, '@', GREEN);
+    screen::clear();
+    screen::put(20, 12, '@', screen::GREEN);
     halt();
 }
 ```
 
 Run it with `--tui` and a green `@` sits in the middle of an otherwise
 blank 40×25 screen. `use screen;` pulls in the screen library; without that
-line, `clear_screen`/`put_cell`/`GREEN` don't exist as far as the compiler
-is concerned. Three calls, no addresses: `clear_screen()` blanks every
-cell, `put_cell(x, y, glyph, color)` draws one, `halt()` stops the CPU.
-`GREEN` is one of nine color constants
+line, `screen::clear`/`screen::put`/`screen::GREEN` don't exist as far as
+the compiler is concerned. Three calls, no addresses: `screen::clear()`
+blanks every cell, `screen::put(x, y, glyph, color)` draws one, `halt()`
+stops the CPU. `screen::GREEN` is one of nine color constants
 (`BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN WHITE`) the library
 predefines for you.
 
-`clear_screen`, `put_cell`, `GREEN` — none of these are keywords. They're
-ordinary functions and constants from the **screen library**, one of four
-standard libraries (more on that in
-[The standard library](#the-standard-library)). You could write your own
-versions of any of them, and yours would win.
+`screen::clear`, `screen::put`, `screen::GREEN` — none of these are
+keywords. They're ordinary functions and constants from the **screen
+library**, one of five standard libraries (more on that in
+[The standard library](#the-standard-library)) — always called by their
+full `module::name` path, never a bare name.
 
 ## Types: u16, i16, bool
 
@@ -232,41 +235,97 @@ comes up in practice.
 
 ## The standard library
 
-Everything you've used so far except `poke` — `clear_screen`, `put_cell`,
-`GREEN` — comes from the **standard library**: four small, separately
-importable libraries for screen, input, time, and randomness (LANGUAGE.md
-§7), written in s16c itself. `use` the ones you need; the rest simply don't
-exist as far as your program is concerned.
+Everything you've used so far except `poke`/`halt` — `screen::clear`,
+`screen::put`, `screen::GREEN` — comes from the **standard library**: five
+small, separately importable libraries for screen, input, time, randomness,
+and debug output (LANGUAGE.md §7), written in s16c itself. `use` the ones
+you need, and always call their items by the full `module::name` path —
+there's no bare-name shortcut, even after `use`.
 
 ### `use screen;`
 
 | Call | Effect |
 |------|--------|
-| `SCREEN_W`, `SCREEN_H` | `40`, `25` — the display size |
-| `put_cell(x, y, glyph, color)` | draw one character cell |
-| `get_cell(x, y) -> u16` | read back the glyph at `(x, y)` — for collision checks |
-| `clear_screen()` | blank the whole screen |
-| `BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN WHITE` | color constants |
+| `screen::SCREEN_W`, `screen::SCREEN_H` | `40`, `25` — the display size |
+| `screen::put(x, y, glyph, color)` | draw one character cell |
+| `screen::get(x, y) -> u16` | read back the glyph at `(x, y)` — for collision checks |
+| `screen::clear()` | blank the whole screen |
+| `screen::print(x, y, s, color)` | draw a string, one glyph per cell, left to right |
+| `screen::BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN WHITE` | color constants |
 
 ### `use input;`
 
 | Call | Effect |
 |------|--------|
-| `read_input() -> u16` | the current key bitmask |
-| `key_up/down/left/right/a/b/start/select(keys) -> bool` | test one key from a `read_input()` bitmask |
+| `input::read() -> u16` | the current key bitmask |
+| `input::key_up/down/left/right/a/b/start/select(keys) -> bool` | test one key from an `input::read()` bitmask |
 
 ### `use time;`
 
 | Call | Effect |
 |------|--------|
-| `ticks() -> u16` | the machine's current tick count |
-| `wait_tick()` | block until the next tick — the standard way to pace a game loop |
+| `time::tick() -> u16` | the machine's current tick count |
+| `time::wait_next()` | block until the next tick — the standard way to pace a game loop |
 
-### `use random;`
+### `use rng;`
 
 | Call | Effect |
 |------|--------|
-| `random(max) -> u16` | a pseudorandom value in `0..max` |
+| `rng::next(max) -> u16` | a pseudorandom value in `0..max` |
+
+### `use debug;`
+
+Text output through a debug-console MMIO device — *not* the framebuffer, so
+it doesn't disturb anything you've drawn — and host-agnostic: the local
+emulator prints it, a future Solana host could map it to program logs or
+ignore it. Unlike the others, this one takes **string literals**, covered
+just below.
+
+| Call | Effect |
+|------|--------|
+| `debug::print(s)` | write a string |
+| `debug::println(s)` | write a string, then a newline |
+| `debug::print_u16(value)` | write a `u16` in decimal |
+| `debug::print_i16(value)` | write an `i16` in decimal, with a `-` if negative |
+| `debug::print_hex(value)` | write a `u16` as `0x` + 4 hex digits |
+
+```rust
+use debug;
+
+fn main() {
+    debug::print_u16(150);      // "150"
+    debug::println("done");     // "done\n"
+    halt();
+}
+```
+
+Run this in **batch mode** — no `--tui` needed:
+
+```sh
+cargo run -p s16c -- yourfile.s16c --bin
+cargo run -p s16-emulator -- yourfile.bin
+```
+
+and `150` and `done` show up right in the terminal, above the usual register
+dump. This is the fix for the thing raw `peek`/`poke` could never quite do:
+get a value out of a simple, non-interactive program without drawing to the
+screen or reading memory from Rust yourself.
+
+**String literals (`"..."`) only work as arguments to `debug::print`/
+`println`/`screen::print`.** There's no general string type — you can't
+assign one to a `var`, compare two, or pass one where a plain `u16` is
+expected:
+
+```
+$ s16c bad.s16c
+bad.s16c:2:14: expected an expression
+```
+
+for `var x: u16 = "hi";` — a string literal simply isn't valid syntax
+outside a call argument, so this is a parse error before the type checker
+even runs. It's compile-time data (bytes baked into the image) and an
+address, nothing more (D024) — the same "no heap, nothing runtime" spirit
+as the rest of the language.
 
 Put together, this is enough for a complete interactive program — no raw
 addresses anywhere:
@@ -281,21 +340,21 @@ static Y: u16 = 12;
 
 fn main() {
     loop {
-        var keys: u16 = read_input();
-        put_cell(X, Y, ' ', BLACK);             // erase old position
-        if key_left(keys)  && X > 0             { X = X - 1; }
-        if key_right(keys) && X < SCREEN_W - 1  { X = X + 1; }
-        if key_up(keys)    && Y > 0             { Y = Y - 1; }
-        if key_down(keys)  && Y < SCREEN_H - 1  { Y = Y + 1; }
-        put_cell(X, Y, '@', GREEN);
-        wait_tick();
+        var keys: u16 = input::read();
+        screen::put(X, Y, ' ', screen::BLACK);                // erase old position
+        if input::key_left(keys)  && X > 0                    { X = X - 1; }
+        if input::key_right(keys) && X < screen::SCREEN_W - 1  { X = X + 1; }
+        if input::key_up(keys)    && Y > 0                    { Y = Y - 1; }
+        if input::key_down(keys)  && Y < screen::SCREEN_H - 1  { Y = Y + 1; }
+        screen::put(X, Y, '@', screen::GREEN);
+        time::wait_next();
     }
 }
 ```
 
 This is [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) — a `loop { }` that
-reads input, redraws, and paces itself on `wait_tick()` *is* a game loop,
-the same shape snake will use:
+reads input, redraws, and paces itself on `time::wait_next()` *is* a game
+loop, the same shape snake will use:
 
 ```sh
 cargo run -p s16c -- programs/s16c/walk.s16c --bin
@@ -306,19 +365,19 @@ cargo run -p s16-emulator -- --tui programs/s16c/walk.bin   # arrow keys move '@
 
 ```
 $ s16c bad.s16c
-bad.s16c:2:5: unknown function `put_cell` (found in library `screen` — add `use screen;`)
+bad.s16c:2:5: unknown function `screen::put` (found in library `screen` — add `use screen;`)
 ```
 
-That's a call to `put_cell` with no `use screen;` anywhere in the file —
+That's a call to `screen::put` with no `use screen;` anywhere in the file —
 the error names the missing library instead of just saying "unknown
-function." (This hint only fires for an actual call, `name(...)` — a plain
-variable that happens to share a library function's name is just an
-ordinary variable, not a hint trigger.) `use` an unknown library name and
-you get a similar nudge:
+function." (This hint only fires for a *qualified* call, `module::name(...)`
+— a bare, unqualified name is never a library reference at all, qualified
+or not, so it just falls through to an ordinary unknown-name error.) `use`
+an unknown library name and you get a similar nudge:
 
 ```
 $ s16c bad.s16c
-bad.s16c:1:5: no such library `graphics`; available: input, random, screen, time
+bad.s16c:1:5: no such library `graphics`; available: debug, input, rng, screen, time
 ```
 
 **`use` order doesn't matter**, same as every other item — it can go at the
@@ -327,18 +386,12 @@ for a library you already imported is harmless, not an error.
 
 **Only what you reference gets compiled in**, even from a `use`d library.
 The library is ordinary s16c code; the compiler includes a function only if
-your program calls it (directly or transitively — calling `put_cell` pulls
-in the small helper it uses internally, for instance), so `use screen;`
-doesn't bloat your image with every screen function you didn't call.
+your program calls it (directly or transitively — calling `screen::put`
+pulls in the small helper it uses internally, for instance), so
+`use screen;` doesn't bloat your image with every screen function you
+didn't call.
 
-**Your own definitions always win.** Write your own `fn clear_screen()` and
-it replaces the library's everywhere, including inside other library
-functions that call it — one flat namespace, and the library just fills in
-the parts you haven't claimed (see COMPILER.md's
-[Standard Library Merge](../specs/COMPILER.md#standard-library-merge) if
-you want the exact rule).
-
-**No package manager.** These four libraries are the entire built-in
+**No package manager.** These five libraries are the entire built-in
 catalog — there's no mechanism yet for pulling in a file, a URL, or a
 third-party crate-equivalent. If you need something the libraries don't
 offer, write it in your own program (or reach for
@@ -349,7 +402,7 @@ offer, write it in your own program (or reach for
 Everything in the standard library is built from six lower-level builtins —
 `peek`/`poke` (word) and `peek8`/`poke8` (byte), plus `halt`/`brk`. Reach
 for these when you need an address the library doesn't have a name for yet;
-`put_cell` itself is just a couple of multiplies and a `poke`.
+`screen::put` itself is just a couple of multiplies and a `poke`.
 
 ```rust
 const FB: u16 = 0xF000;
@@ -365,17 +418,17 @@ fn main() {
 }
 ```
 
-This draws the same way `put_cell` does, just spelling out the framebuffer
-address by hand instead of calling it — a good exercise once, and the
-pattern to reach for later if you outgrow what §
+This draws the same way `screen::put` does, just spelling out the
+framebuffer address by hand instead of calling it — a good exercise once,
+and the pattern to reach for later if you outgrow what §
 [The standard library](#the-standard-library) offers.
 
-A practical note: nothing in s16c prints values for you to inspect —
-`poke`'d results live in memory, and the batch emulator's register dump
-(what you see without `--tui`) won't show them. The two real ways to check
-a value: poke it onto the framebuffer and watch with `--tui` (as above), or
-inspect memory directly from Rust the way the compiler's own test suite
-does (see
+A practical note: before `debug::print*` existed, `poke`'d results were
+awkward to inspect — they just sit in memory, and the batch emulator's
+register dump won't show them. `use debug;` and `debug::print_u16`/etc.
+(above) is the normal way to check a value now. The old ways still work
+too: poke it onto the framebuffer and watch with `--tui`, or inspect memory
+directly from Rust the way the compiler's own test suite does (see
 [using-s16-core.md](using-s16-core.md#writing-tests-against-the-cpu)):
 
 ```rust
@@ -393,14 +446,16 @@ cargo run -p s16c -- yourfile.s16c    # writes yourfile.s16
 
 The output is deliberately readable — every function becomes a labeled
 `F_name:` block with a standard prologue, every `static` becomes a `.word`
-line under a `G_name:` label — so when something compiles to behavior you
-didn't expect, reading the `.s16` is the fastest way to find out why.
-Codegen is intentionally simple rather than clever (COMPILER.md pins
-*behavior*, not code quality), so the output is usually easy to follow even
-without deep assembly experience: expressions evaluate through `R12`/`R13`,
-locals live at `[R15-2]`, `[R15-4]`, ... and so on. Calling a standard
-library function like `put_cell` looks exactly like calling one of your
-own — because to the compiler, it is one.
+line under a `G_name:` label, every string literal a `.byte` line — so when
+something compiles to behavior you didn't expect, reading the `.s16` is the
+fastest way to find out why. Codegen is intentionally simple rather than
+clever (COMPILER.md pins *behavior*, not code quality), so the output is
+usually easy to follow even without deep assembly experience: expressions
+evaluate through `R12`/`R13`, locals live at `[R15-2]`, `[R15-4]`, ... and
+so on. Calling a standard library function like `screen::put` looks exactly
+like calling one of your own (label `F_screen__put` — `::` becomes `__`,
+since assembly labels can't contain `::`) — because to the compiler, it is
+one.
 
 You can also assemble and run that `.s16` file exactly like any hand-written
 program from [writing-programs.md](writing-programs.md) — it's ordinary S16
@@ -417,8 +472,13 @@ early on:
   which can appear in any order, locals must be declared with `var` before
   use.
 - **`` `f` expects N argument(s), got M ``** — arity is checked at every
-  call site, builtins and library calls included (`put_cell` takes exactly
-  four arguments).
+  call site, builtins and library calls included (`screen::put` takes
+  exactly four arguments).
+- **`expected a string literal`** — a `str` parameter (`debug::print`,
+  `screen::print`) was called with something other than a literal `"..."`
+  directly in the call — a `var` holding text isn't possible to construct
+  in the first place (D024), so this only ever fires on things like passing
+  a `u16` where a string was expected.
 - **`cannot assign to constant`** — `const` is compile-time only and holds
   no memory; only `static` is assignable.
 - **`comparisons are non-associative; parenthesize`** — `a < b < c` isn't
@@ -431,12 +491,16 @@ itself isn't part of the contract, but what gets rejected is.
 
 ## What's not here yet
 
-Structs, enums, pointers, strings, local arrays, `match`, closures, and
-user-authored or external libraries — all explicitly deferred past v1
-(LANGUAGE.md's closing section). `use` only names one of the four built-in
-libraries; there's no file-path or URL form. There are also no methods or
-dot syntax: the standard library is called as plain functions
-(`put_cell(x, y, ...)`, not `screen.put(x, y, ...)`). If a program needs a
-struct, the workaround today is usually parallel arrays (as
+Structs, enums, pointers, a general string type, local arrays, `match`,
+closures, user-authored or external libraries, and user-defined modules —
+all explicitly deferred past v1 (LANGUAGE.md's closing section). String
+*literals* are in v1, but only as call arguments (`str` parameters,
+above) — there's still no way to hold, build, or manipulate text at
+runtime. `use` only names one of the five built-in libraries; there's no
+file-path or URL form, and no `use module::item;` single-item form — only
+`use module;` then the full `module::name` path. There are also no methods
+or dot syntax: the standard library is called with `::`, not `.`
+(`screen::put(x, y, ...)`, not `screen.put(x, y, ...)`). If a program needs
+a struct, the workaround today is usually parallel arrays (as
 `SCORES`/`TOTAL` above) or plain integers standing in for an enum. That's
 enough for Snake and Pong, which is the whole design point.

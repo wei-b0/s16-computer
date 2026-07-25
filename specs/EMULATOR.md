@@ -37,6 +37,12 @@ Runs the CPU alone — no devices are serviced, matching plain `s16-core`
 semantics — until it stops or a large step budget (10^8 instructions) is
 exhausted, then prints the final state and exits.
 
+The one narrow exception (D025): after the CPU stops, the debug console
+buffer (`DEBUG_LEN`/`DEBUG_BUF`, [MEMORY_MAP.md](MEMORY_MAP.md#debug-console-0xf800f901))
+is read once, directly from memory — no ticking, no other device serviced —
+so a simple non-interactive program (`debug::print_u16(...); halt();`) can
+still print a result without `--tui`.
+
 Required output, in order:
 
 1. One status line naming why execution stopped:
@@ -47,8 +53,10 @@ Required output, in order:
      [INSTRUCTION_SET.md#execution-states](INSTRUCTION_SET.md#execution-states))
    - `still running after N instructions (step budget hit)` (likely an
      infinite loop)
-2. `PC=0x____  SP=0x____  FLAGS=0b____`
-3. All 16 registers, `R0`–`R15`, hex, in reading order.
+2. If the debug console buffer is non-empty: a `debug output:` line,
+   followed by its contents as text.
+3. `PC=0x____  SP=0x____  FLAGS=0b____`
+4. All 16 registers, `R0`–`R15`, hex, in reading order.
 
 **Exit code:** 0 for `Halted` or `DebugHalt`; 1 for `Faulted` or exhausting
 the step budget while still `Running`. Scripts and CI may rely on this to
@@ -77,7 +85,10 @@ Every framebuffer cell (`0xF000` base, per
 
 A one-line status bar below the grid shows the tick count and current CPU
 state (`running`, `halted`, `BRK - press r to resume`, or the fault line from
-batch mode).
+batch mode) — or, for any tick where the program wrote debug-console output
+(D025), that text in place of the tick/state text. There is no scrollback:
+the bar always shows the most recent tick's debug text, not a running log —
+a known v1 limitation.
 
 ### Input
 

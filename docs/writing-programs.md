@@ -143,4 +143,4 @@ mode (no `--tui`) devices stay silent and only the CPU runs.
 
 Everything here — loops, subroutines, MMIO — is what
 [writing-s16c.md](writing-s16c.md) automates: `while`, function calls, and
-`put_cell`/`read_input` compile straight down to the patterns above.
+`screen::put`/`input::read` compile straight down to the patterns above.

@@ -26,52 +26,61 @@ since it doubles as the debugging view of compiled programs.
 
 ## Standard Library Merge
 
-The four standard libraries (LANGUAGE.md §7) are s16c source. A library's
-items are visible to a program only if the program `use`s that library
-(D019, D022). An implementation must:
+The five standard libraries (LANGUAGE.md §7) are s16c source. A library's
+items are visible to a program only if the program `use`s that library, and
+are only ever callable through their full `module::name` path (D019, D022,
+D023). An implementation must:
 
 1. **Validate `use` items against the fixed library registry** (`screen`,
-   `input`, `time`, `random`). An unknown name is an error naming the
+   `input`, `time`, `rng`, `debug`). An unknown name is an error naming the
    available libraries; a name `use`d more than once is not an error (later
    `use`s of an already-`use`d library are simply redundant).
 2. **Include a library item only if it's referenced**, directly or
    transitively, from the user's source **and** its library was `use`d — a
-   call, a name use, an array index, or an assignment target counts as a
-   reference. A library function calling another function in the same
-   library counts as that function referencing it, so the inclusion set is
-   a transitive closure within the `use`d libraries, not just a
-   first-level scan. This is unchanged from before libraries were split
-   apart — `use` only changes which items are even *eligible*, not how
-   eligible ones get pruned.
-3. **Let user definitions shadow a `use`d library completely.** If the
-   user's source defines a `fn`/`static`/`const` with a name a `use`d
-   library also defines, the library's version is excluded from the build
-   entirely — it never reaches typecheck or codegen. Every reference to
-   that name, including from within other (included) library functions,
-   resolves to the user's definition. There is one flat namespace; the
-   library populates the part of it the user doesn't.
+   qualified call, a qualified name use, or an array index counts as a
+   reference. A library function calling another function in the *same*
+   library (by bare name, internally — see point 6) counts as that function
+   referencing it, so the inclusion set is a transitive closure within the
+   `use`d libraries, not just a first-level scan.
+3. **There is no bare-name fallback.** Unlike before module-qualification
+   (D020), a program's own `fn`/`static`/`const` can never collide with, or
+   shadow, a library item — a program can't write `::` in a name it
+   defines, so the two namespaces (a program's own flat names, and every
+   library's `module::name` names) can't overlap in the first place. A bare
+   call to a name that happens to match a library export by coincidence
+   (e.g. calling unqualified `put(...)` when only `screen::put` exists) is
+   a plain unknown-function error, not a hint and not a resolution to the
+   library.
 4. **Merge deterministically.** The same source must produce the same
    output on every build — included library items appear in a fixed order
    (library registry order, then source order within each library), not in
    whatever order a reachability scan happens to visit them.
 5. **Diagnose a call to an un-`use`d library helpfully.** If the program
-   calls a name (call position specifically — see the note below) that
-   isn't defined anywhere in the program but *is* a known export of a
-   library the program didn't `use`, the error must say so and name the
-   library, rather than reporting a bare "unknown function." This is a
-   depth requirement, not a wording one: an implementation may phrase it
-   differently, but a program that calls `put_cell` without `use screen;`
-   must get a more specific answer than a generic unknown-name error.
+   calls a *qualified* name (call position specifically — see the note
+   below) whose library is a real one it didn't `use`, the error must say
+   so and name the library, rather than reporting a bare "unknown
+   function." This is a depth requirement, not a wording one: an
+   implementation may phrase it differently, but a program that calls
+   `screen::put` without `use screen;` must get a more specific answer than
+   a generic unknown-name error.
    - This diagnostic is scoped to **call position only**
-     (`name(...)`) — a bare reference to a name that happens to collide
-     with a non-`use`d library export (e.g. a local variable someone named
-     `random`) must **not** trigger it; that's a plain unknown-name error
-     like any other. Calling something is what implies "this must resolve
-     to a function."
+     (`module::name(...)`) — a bare reference to an unqualified name that
+     happens to coincide with some library's internal helper is **not** a
+     library reference at all under module-qualification, and must **not**
+     trigger it; that's a plain unknown-name error like any other.
+6. **Library internals are named once, qualified, everywhere.** An
+   included library item's own name is rewritten to its qualified form
+   (`put` → `screen::put`) — and so is every same-library bare reference
+   inside its own body, so that e.g. `screen::clear`'s internal call to
+   `put` still resolves after `put` itself becomes `screen::put`. Two
+   different libraries may freely share an internal helper name (e.g.
+   `write_byte` in both `screen` and `debug`) without collision, since each
+   is qualified by its own library.
 
 This is why the standard-library and raw-MMIO versions below are
 behaviorally identical: the library version is just `use`d s16c source that
-got included by the same rules any of the user's own code follows.
+got included and qualified by the same rules any of the user's own code
+follows.
 
 ```rust
 // Written against the standard library (LANGUAGE.md §9):
@@ -81,18 +90,18 @@ use time;
 
 fn main() {
     loop {
-        var keys: u16 = read_input();
-        put_cell(20, 12, ' ', BLACK);
+        var keys: u16 = input::read();
+        screen::put(20, 12, ' ', screen::BLACK);
         // ...
-        wait_tick();
+        time::wait_next();
     }
 }
 ```
 
 ```rust
-// The same behavior, written directly against MMIO — what put_cell,
-// read_input, and wait_tick compile to underneath. No `use` needed: the
-// six hardware builtins (§7.5) are always available.
+// The same behavior, written directly against MMIO — what screen::put,
+// input::read, and time::wait_next compile to underneath. No `use` needed:
+// the six hardware builtins (§7.6) are always available.
 const FB: u16 = 0xF000;
 fn main() {
     loop {
@@ -105,8 +114,30 @@ fn main() {
 }
 ```
 
-Nothing about `peek`/`poke` (§7.5) changes: the libraries are not a special
+Nothing about `peek`/`poke` (§7.6) changes: the libraries are not a special
 compiler feature, they're proof that ordinary s16c is enough to build one.
+
+## String Literals and `str` Parameters (D024)
+
+A string literal (`"..."`) is compile-time data: the compiler emits its
+bytes, zero-terminated, into the data section (as `.byte` — not `.asciiz`,
+since the assembler's string-escaping only covers ASCII plus the seven
+named escapes and can't round-trip arbitrary byte values, while `.byte`
+takes any value with no escaping ambiguity) and the argument evaluates to
+that data's address. The *token* is legal **only** as a direct argument to
+a parameter declared `str` — enforced at parse time (a string token is only
+ever consumed while parsing a call's argument list; nowhere else in the
+grammar accepts one), not just by the type checker.
+
+Inside the function body, a `str` parameter is an ordinary `u16` — the
+compiler doesn't carry any string-specific type past the call site. This
+means a `str` *parameter's* argument at a call site isn't restricted to a
+literal either: an ordinary `u16` expression type-checks too, which is what
+lets one `str`-taking function forward its parameter to another (e.g.
+`debug::println(s: str) { debug::print(s); ... }` — `s` inside `println`'s
+body is just a `u16` local). Only the literal *token* is call-argument-only;
+once you have a `str` value (a parameter), passing it onward is an ordinary
+value pass with no special checking, same as any other `u16`.
 
 ## CLI Contract
 
@@ -129,10 +160,10 @@ implementation must reject at least:
 
 | Class | Examples |
 |-------|----------|
-| syntax | unbalanced braces, missing `;`, brace-less `if` |
-| name | unknown variable/function/const, duplicate definition **among the user's own items** (redefining a standard-library name is shadowing, not an error — see Standard Library Merge above), use of an array without an index |
-| imports | `use` of an unknown library name (message lists the real ones); calling a name that exists in a library the program didn't `use` gets the library-specific hint from Standard Library Merge above, not a bare unknown-name error |
-| type | `u16`/`i16` operand mixing without `as`, non-`bool` condition, wrong argument count/types, assigning to a `const`, `return expr` in a `-> ()` function (and vice versa) |
+| syntax | unbalanced braces, missing `;`, brace-less `if`, a string literal anywhere but a call argument, `str` anywhere but a parameter type |
+| name | unknown variable/function/const, duplicate definition **among the user's own items**, use of an array without an index |
+| imports | `use` of an unknown library name (message lists the real ones); calling a qualified name that exists in a library the program didn't `use` gets the library-specific hint from Standard Library Merge above, not a bare unknown-name error |
+| type | `u16`/`i16` operand mixing without `as`, non-`bool` condition, wrong argument count/types, assigning to a `const`, `return expr` in a `-> ()` function (and vice versa), a non-literal argument where a `str` parameter expects one |
 | signedness | `/` or `%` on `i16` (D018), unary `-` on `u16` |
 | const | non-constant `static`/`const` initializer, array size not a constant |
 | structure | missing `fn main()`, `main` with params/return, `break`/`continue` outside a loop |
@@ -143,9 +174,13 @@ Warnings (non-fatal, stderr): none required in v1.
 ## Emitted-Code Contract
 
 1. **Layout:** startup stub at `0x0000` (`CALL main`, then `HALT`), followed
-   by function bodies, followed by the data section (`static` words/arrays,
-   emitted with `.word` and initialized in the image — there is no runtime
-   initializer). The whole image loads at `0x0000` like any S16 program.
+   by function bodies, followed by the data section (`static` words/arrays
+   as `.word`, string-literal bytes as `.byte`, all initialized in the
+   image — there is no runtime initializer). The whole image loads at
+   `0x0000` like any S16 program. Qualified source names (`screen::put`)
+   are mangled to legal label text by replacing `::` with `__`
+   (`F_screen__put`) — `::` can never appear in a name a program defines
+   (LANGUAGE.md §1), so this can't collide with a user-defined label.
 2. **ABI:** every compiled function conforms to
    [CALLING_CONVENTION.md](CALLING_CONVENTION.md) v2 — R0–R3 args, R0
    return, callee-saved R4–R11/R15, FP frames via `RSP`/`WSP`, stack args
@@ -212,11 +247,11 @@ fn main() {
 Required: Halted; `mem16[0x8000] == 151`.
 
 **V4 — devices and the standard library** (the §9 walk example from
-LANGUAGE.md — `use screen; use input; use time;`, then `put_cell`,
-`read_input`, `wait_tick`, no raw addresses — run under `s16-machine` for a
-few ticks with a scripted INPUT): the `@` cell moves right when `KEY_RIGHT`
-is held. Pins the imports resolver, builtins, and machine integration
-together.
+LANGUAGE.md — `use screen; use input; use time;`, then `screen::put`,
+`input::read`, `time::wait_next`, no raw addresses — run under `s16-machine`
+for a few ticks with a scripted INPUT): the `@` cell moves right when
+`KEY_RIGHT` is held. Pins the imports resolver, module-qualified calls,
+builtins, and machine integration together.
 
 ## Appendix: Hand-Compiled Reference
 

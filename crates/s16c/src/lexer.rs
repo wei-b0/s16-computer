@@ -6,6 +6,9 @@ use crate::{CompileError, Pos};
 pub enum Tok {
     Ident(String),
     Int(i64),
+    /// A string literal (`"..."`) — legal only in a call's argument list
+    /// (D024); the parser never accepts this token anywhere else.
+    Str(Vec<u8>),
     // keywords
     Fn,
     Var,
@@ -25,6 +28,7 @@ pub enum Tok {
     U16,
     I16,
     Bool,
+    StrKw, // `str` — parameter-position-only marker (D024)
     // punctuation
     LParen,
     RParen,
@@ -35,7 +39,8 @@ pub enum Tok {
     Comma,
     Semi,
     Colon,
-    Arrow, // ->
+    PathSep, // ::
+    Arrow,   // ->
     // operators
     Assign, // =
     Plus,
@@ -157,6 +162,27 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 return Err(err("unterminated character literal".into()));
             }
             Tok::Int(ch as i64)
+        } else if c == '"' {
+            bump!();
+            let mut bytes = Vec::new();
+            loop {
+                match bump!() {
+                    Some('"') => break,
+                    Some('\\') => bytes.push(match bump!() {
+                        Some('n') => b'\n',
+                        Some('t') => b'\t',
+                        Some('r') => b'\r',
+                        Some('0') => 0,
+                        Some('\\') => b'\\',
+                        Some('\'') => b'\'',
+                        Some('"') => b'"',
+                        other => return Err(err(format!("bad escape `\\{}`", other.unwrap_or(' ')))),
+                    }),
+                    Some(c) if c.is_ascii() && c != '\n' => bytes.push(c as u8),
+                    _ => return Err(err("unterminated string literal".into())),
+                }
+            }
+            Tok::Str(bytes)
         } else {
             bump!();
             let two = |chars: &mut std::iter::Peekable<std::str::Chars>, want: char| {
@@ -178,7 +204,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 ']' => Tok::RBracket,
                 ',' => Tok::Comma,
                 ';' => Tok::Semi,
-                ':' => Tok::Colon,
+                ':' => {
+                    if two(&mut chars, ':') {
+                        took_second = true;
+                        Tok::PathSep
+                    } else {
+                        Tok::Colon
+                    }
+                }
                 '+' => Tok::Plus,
                 '*' => Tok::Star,
                 '/' => Tok::Slash,
@@ -280,6 +313,7 @@ fn keyword(word: &str) -> Option<Tok> {
         "u16" => Tok::U16,
         "i16" => Tok::I16,
         "bool" => Tok::Bool,
+        "str" => Tok::StrKw,
         _ => return None,
     })
 }
@@ -342,5 +376,37 @@ mod tests {
     fn bad_input_reports_position() {
         let e = lex("var @").unwrap_err();
         assert_eq!((e.line, e.col), (1, 5));
+    }
+
+    #[test]
+    fn path_sep_and_string_literals() {
+        assert_eq!(
+            toks("screen::put(1, \"Hi\\n\")"),
+            vec![
+                Tok::Ident("screen".into()),
+                Tok::PathSep,
+                Tok::Ident("put".into()),
+                Tok::LParen,
+                Tok::Int(1),
+                Tok::Comma,
+                Tok::Str(b"Hi\n".to_vec()),
+                Tok::RParen,
+            ]
+        );
+        assert_eq!(toks("fn f(s: str)"), vec![
+            Tok::Fn,
+            Tok::Ident("f".into()),
+            Tok::LParen,
+            Tok::Ident("s".into()),
+            Tok::Colon,
+            Tok::StrKw,
+            Tok::RParen,
+        ]);
+    }
+
+    #[test]
+    fn unterminated_string_errors() {
+        assert!(lex("\"abc").is_err());
+        assert!(lex("\"abc\ndef\"").is_err());
     }
 }

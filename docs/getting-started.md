@@ -41,8 +41,8 @@ A green `@` appears on a 40×25 screen. Arrow keys move it; esc quits.
 
 `walk.s16c` itself is short — `use screen; use input; use time;`, then a
 `loop` that reads the keys, erases the old position, redraws at the new one,
-and paces itself with `wait_tick()`. No raw addresses anywhere; that's the
-point of s16c's standard library (more in
+and paces itself with `time::wait_next()`. No raw addresses anywhere;
+that's the point of s16c's standard library (more in
 [writing-s16c.md](writing-s16c.md)).
 
 ## 4. Change something
@@ -51,7 +51,7 @@ Open [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) and change the
 color:
 
 ```rust
-put_cell(X, Y, '@', GREEN);
+screen::put(X, Y, '@', screen::GREEN);
 ```
 
 to `YELLOW` (or any of `BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN
@@ -69,7 +69,7 @@ cargo run -p s16c -- programs/s16c/walk.s16c    # writes programs/s16c/walk.s16
 
 That output is ordinary S16 assembly — the same language as the hand-written
 programs in `programs/asm/`, nothing about compiler output is special-cased.
-Worth a skim once you're curious what `put_cell(...)` actually turns into.
+Worth a skim once you're curious what `screen::put(...)` actually turns into.
 
 Next: [writing-s16c.md](writing-s16c.md) for the full language tutorial —
 types, control flow, functions, the standard library. If you'd rather work

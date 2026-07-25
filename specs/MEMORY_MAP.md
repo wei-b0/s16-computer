@@ -10,7 +10,9 @@ All multi-byte values are **little-endian**.
 |-------|------|--------|
 | `0x0000–0xEFFF` | 60 KB | General-purpose memory: code, data, stack |
 | `0xF000–0xF7FF` | 2 KB | MMIO: framebuffer |
-| `0xF800–0xFEFF` | ~1.75 KB | MMIO: reserved for future devices |
+| `0xF800–0xF8FF` | 256 B | MMIO: debug-console output buffer |
+| `0xF900–0xF901` | 2 B | MMIO: debug-console output length |
+| `0xF902–0xFEFF` | ~1.75 KB | MMIO: reserved for future devices |
 | `0xFF00–0xFFFF` | 256 B | MMIO: system devices |
 
 ## General-Purpose Memory (`0x0000–0xEFFF`)
@@ -38,7 +40,25 @@ cell(row, col) at 0xF000 + (row * 40 + col) * 2     row ∈ [0,24], col ∈ [0,3
 
 Writing a cell as a single 16-bit `STW` (attribute in the high byte, character in the low byte) is the idiomatic fast path.
 
-## Reserved (`0xF800–0xFEFF`)
+## Debug Console (`0xF800–0xF901`)
+
+Text output for `debug::print`/`println`/`print_u16`/`print_i16`/`print_hex`
+(s16c `debug` library) — *not* the framebuffer, and host-agnostic (D025):
+the local emulator prints it, a future Solana host could map it to program
+logs or ignore it entirely.
+
+| Address | Name | Access | Semantics |
+|---------|------|--------|-----------|
+| `0xF800–0xF8FF` | `DEBUG_BUF` | W | 256-byte buffer the program writes text into, one byte at a time (`poke8`). |
+| `0xF900` | `DEBUG_LEN` | RW | How many bytes of `DEBUG_BUF` are valid. The program increments this as it writes; the host resets it to `0` once it has drained the buffer, each tick (below). |
+
+This is the memory map's first **CPU-writes/host-reads** register — every
+other device on this page is host-writes/CPU-reads. Writing past byte 255
+without a drain in between is silently dropped (`debug.s16c`'s `write_byte`
+checks `DEBUG_LEN` before writing) — a known, documented v1 limit, the same
+class of sharp edge as unchecked array indexing in LANGUAGE.md.
+
+## Reserved (`0xF902–0xFEFF`)
 
 Reserved for future devices (e.g., audio, storage, network). Reads return 0; writes are ignored. Do not use.
 
@@ -60,9 +80,15 @@ The machine runs the CPU in **ticks** (implemented by `s16-machine`). Each tick:
 
 1. The machine writes the device registers: `INPUT` (host-provided key state), `RNG` (advanced once), `TICK` (current count).
 2. The CPU executes up to a host-chosen **budget** of instructions (or until it stops).
-3. The machine writes `STATUS` and increments the tick counter.
+3. The machine reads `DEBUG_LEN`/`DEBUG_BUF`, exposes that tick's debug text to the host (replacing, not accumulating, whatever the previous tick exposed), and resets `DEBUG_LEN` to `0` so the program can keep appending next tick.
+4. The machine writes `STATUS` and increments the tick counter.
 
 Hosts map ticks to their own time base — the emulator runs one tick per rendered frame; the Solana host runs one (or more) per transaction. Device registers keep updating after the CPU stops, so renderers stay live. Determinism rule: given the same seed, per-tick inputs, and budgets, every host produces the identical machine state.
+
+Batch mode (no ticking at all — see [EMULATOR.md](EMULATOR.md)) does not
+service any device this way; it gets one narrow exception, reading
+`DEBUG_LEN`/`DEBUG_BUF` a single time after the CPU stops, so a simple
+non-interactive program can still print a result.
 
 How key events become the `INPUT` bitmask (keyboard in the emulator, transaction data on-chain) remains a host concern.
 

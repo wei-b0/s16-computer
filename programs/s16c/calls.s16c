@@ -2,6 +2,11 @@
 // The s16c counterpart to programs/asm/calls.s16: ordinary function calls
 // (square, sum_squares) instead of hand-written CALL/RET and PUSH/POP —
 // the compiler builds the stack frames and preserves what needs preserving.
+// Run with:
+//   cargo run -p s16c -- programs/s16c/calls.s16c --bin
+//   cargo run -p s16-emulator -- programs/s16c/calls.bin
+
+use debug;
 
 static DATA: [u16; 4] = [1, 2, 3, 4];
 
@@ -20,6 +25,6 @@ fn sum_squares(len: u16) -> u16 {
 }
 
 fn main() {
-    poke(0x8000, sum_squares(4));   // 30
+    debug::print_u16(sum_squares(4));   // 30
     halt();
 }

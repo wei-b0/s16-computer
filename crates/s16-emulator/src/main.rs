@@ -163,10 +163,34 @@ fn run_batch(image: &[u8]) -> ExitCode {
         ),
         State::Running => println!("still running after {steps} instructions (step budget hit)"),
     }
+    print_debug_output(mem);
     print_registers(&cpu);
 
     match cpu.state {
         State::Halted | State::DebugHalt => ExitCode::SUCCESS,
         _ => ExitCode::FAILURE,
+    }
+}
+
+/// Batch mode still does not tick or service INPUT/RNG/TICK/STATUS at all
+/// (D025) — this is one narrow, deliberate exception: a one-shot final read
+/// of whatever the program left in the debug-console buffer, straight out
+/// of `mem`, no `Machine` involved. It's what lets a simple `debug::print*`
+/// example print its result without needing `--tui`.
+fn print_debug_output(mem: &[u8; MEMORY_SIZE]) {
+    let len = u16::from_le_bytes([
+        mem[s16_machine::mmio::DEBUG_LEN as usize],
+        mem[s16_machine::mmio::DEBUG_LEN as usize + 1],
+    ]) as usize;
+    let len = len.min(s16_machine::mmio::DEBUG_BUF_CAP);
+    if len == 0 {
+        return;
+    }
+    let base = s16_machine::mmio::DEBUG_BUF as usize;
+    let text = String::from_utf8_lossy(&mem[base..base + len]);
+    println!("debug output:");
+    print!("{text}");
+    if !text.ends_with('\n') {
+        println!();
     }
 }

@@ -1,0 +1,69 @@
+// The `debug` library (specs/LANGUAGE.md §7.5): text output through the
+// debug-console MMIO device (specs/MEMORY_MAP.md), not the framebuffer —
+// host-agnostic (D025): the local emulator prints it, a future Solana host
+// could map it to program logs or ignore it. `use debug;` then call
+// `debug::print`/`println`/`print_u16`/`print_i16`/`print_hex`.
+
+const DEBUG_BUF: u16 = 0xF800;
+const DEBUG_BUF_CAP: u16 = 256;
+const DEBUG_LEN: u16 = 0xF900;
+
+fn write_byte(b: u16) {
+    var len: u16 = peek(DEBUG_LEN);
+    if len < DEBUG_BUF_CAP {
+        poke8(DEBUG_BUF + len, b);
+        poke(DEBUG_LEN, len + 1);
+    }
+}
+
+fn print(s: str) {
+    var i: u16 = 0;
+    loop {
+        var b: u16 = peek8(s + i);
+        if b == 0 { break; }
+        write_byte(b);
+        i = i + 1;
+    }
+}
+
+fn println(s: str) {
+    print(s);
+    write_byte(10); // '\n'
+}
+
+// Recursive digit printing needs no scratch buffer (s16c has no local
+// arrays — D015 — but does support recursion, e.g. fib.s16c).
+fn print_digits(value: u16) {
+    if value >= 10 { print_digits(value / 10); }
+    write_byte((value % 10) + 48); // '0' = 48
+}
+
+fn print_u16(value: u16) {
+    print_digits(value);
+}
+
+fn print_i16(value: i16) {
+    if value < 0 {
+        write_byte(45); // '-'
+        value = -value; // correct even for i16::MIN: wraps back to itself,
+                         // and reinterpreting that bit pattern as u16 gives
+                         // exactly the right magnitude (32768)
+    }
+    print_u16(value as u16);
+}
+
+fn print_hex(value: u16) {
+    write_byte(48); // '0'
+    write_byte(120); // 'x'
+    var shift: u16 = 16;
+    loop {
+        if shift == 0 { break; }
+        shift = shift - 4;
+        var nibble: u16 = (value >> shift) & 0xF;
+        if nibble < 10 {
+            write_byte(nibble + 48); // '0'..'9'
+        } else {
+            write_byte(nibble - 10 + 65); // 'A'..'F'
+        }
+    }
+}

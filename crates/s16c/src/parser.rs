@@ -79,6 +79,16 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// A parameter's type: `str` (D024, parameter-position-only) or an
+    /// ordinary scalar. Never valid for `var`/`static`/`const`/return types.
+    fn param_kind(&mut self) -> Result<ParamKind, CompileError> {
+        if self.eat(&Tok::StrKw) {
+            Ok(ParamKind::Str)
+        } else {
+            self.scalar().map(ParamKind::Value)
+        }
+    }
+
     // --- Items ---------------------------------------------------------------
 
     fn item(&mut self) -> Result<Item, CompileError> {
@@ -107,7 +117,7 @@ impl<'a> Parser<'a> {
             loop {
                 let (pname, ppos) = self.ident("parameter name")?;
                 self.expect(Tok::Colon, "`:` after parameter name")?;
-                params.push((pname, self.scalar()?, ppos));
+                params.push((pname, self.param_kind()?, ppos));
                 if !self.eat(&Tok::Comma) {
                     break;
                 }
@@ -280,6 +290,20 @@ impl<'a> Parser<'a> {
         self.or_expr()
     }
 
+    /// A single call argument: a string literal (D024, legal *only* here —
+    /// no other call to `expr()` in this file ever sees `Tok::Str`, so a
+    /// string literal anywhere else is a parse error, not a type error), or
+    /// an ordinary expression.
+    fn call_arg(&mut self) -> Result<Expr, CompileError> {
+        let pos = self.pos();
+        if let Some(Tok::Str(_)) = self.peek() {
+            let Some(Tok::Str(bytes)) = self.next().cloned() else { unreachable!() };
+            Ok(Expr { kind: ExprKind::Str(bytes), pos })
+        } else {
+            self.expr()
+        }
+    }
+
     fn binary_level(
         &mut self,
         next: fn(&mut Self) -> Result<Expr, CompileError>,
@@ -407,12 +431,23 @@ impl<'a> Parser<'a> {
                 self.expect(Tok::RParen, "`)`")?;
                 Ok(e)
             }
-            Some(Tok::Ident(name)) => {
+            Some(Tok::Ident(first)) => {
+                // `module::name` is pure string-level namespacing (D023):
+                // fold it into one flat `module::name` string and fall
+                // through the existing call/index/bare-name branches
+                // unchanged. `::` can never appear in a real identifier, so
+                // this can't collide with any user-written name.
+                let name = if self.eat(&Tok::PathSep) {
+                    let (second, _) = self.ident("name after `::`")?;
+                    format!("{first}::{second}")
+                } else {
+                    first
+                };
                 if self.eat(&Tok::LParen) {
                     let mut args = Vec::new();
                     if !self.eat(&Tok::RParen) {
                         loop {
-                            args.push(self.expr()?);
+                            args.push(self.call_arg()?);
                             if !self.eat(&Tok::Comma) {
                                 break;
                             }
@@ -498,6 +533,35 @@ mod tests {
         assert_eq!(u.name, "screen");
         let Item::Use(u) = &items[1] else { panic!() };
         assert_eq!(u.name, "input");
+    }
+
+    #[test]
+    fn module_qualified_calls_and_names() {
+        let items = parse_ok("fn f() { screen::put(1, 2, 3, screen::GREEN); }");
+        let Item::Fn(f) = &items[0] else { panic!() };
+        let Stmt::Expr(e) = &f.body[0] else { panic!() };
+        let ExprKind::Call(name, args) = &e.kind else { panic!() };
+        assert_eq!(name, "screen::put");
+        assert!(matches!(&args[3].kind, ExprKind::Name(n) if n == "screen::GREEN"));
+    }
+
+    #[test]
+    fn str_param_kind() {
+        let items = parse_ok("fn print(s: str) { }");
+        let Item::Fn(f) = &items[0] else { panic!() };
+        assert_eq!(f.params[0].1, ParamKind::Str);
+    }
+
+    #[test]
+    fn string_literal_only_legal_as_a_call_argument() {
+        parse_ok("fn f() { debug::print(\"hi\"); }");
+        for bad in [
+            "fn f() { var x: u16 = \"hi\"; }",
+            "fn f() { var b: bool = \"a\" == \"b\"; }",
+            "fn f() { var a: [u16; 1] = [1]; var y: u16 = a[\"hi\"]; }",
+        ] {
+            assert!(parse(&lex(bad).unwrap()).is_err(), "expected parse error for: {bad}");
+        }
     }
 
     #[test]

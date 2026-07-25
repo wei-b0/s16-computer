@@ -144,6 +144,46 @@ fn spin_program_animates_from_tick() {
 }
 
 #[test]
+fn debug_console_drains_and_resets_each_tick() {
+    // Poke "Hi" into DEBUG_BUF and set DEBUG_LEN=2, then halt.
+    let mut mem = load(&format!(
+        r#"
+        LDI  R1, #0x{buf:04X}
+        LDI  R2, #0x48       ; 'H'
+        STB  [R1], R2
+        LDI  R2, #0x69       ; 'i'
+        STB  [R1+1], R2
+        LDI  R1, #0x{len:04X}
+        LDI  R2, #2
+        STW  [R1], R2
+        HALT
+"#,
+        buf = mmio::DEBUG_BUF,
+        len = mmio::DEBUG_LEN,
+    ));
+    let mut machine = Machine::new(1);
+
+    machine.tick(&mut mem, 0, 100);
+    assert_eq!(machine.debug_output(), b"Hi");
+    assert_eq!(read16(&mem, mmio::DEBUG_LEN), 0, "DEBUG_LEN resets after drain");
+
+    // No new writes: next tick's debug_output is empty (replace, not accumulate).
+    machine.tick(&mut mem, 0, 100);
+    assert!(machine.debug_output().is_empty());
+}
+
+#[test]
+fn debug_console_output_is_capped_at_capacity() {
+    let mut mem = load(&format!(
+        "LDI R1, #0x{len:04X}\nLDI R2, #9000\nSTW [R1], R2\nHALT",
+        len = mmio::DEBUG_LEN,
+    ));
+    let mut machine = Machine::new(1);
+    machine.tick(&mut mem, 0, 100);
+    assert_eq!(machine.debug_output().len(), mmio::DEBUG_BUF_CAP);
+}
+
+#[test]
 fn zero_seed_is_valid() {
     let mut a = Xorshift16::new(0);
     let mut b = Xorshift16::new(1);

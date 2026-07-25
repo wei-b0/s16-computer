@@ -1,12 +1,12 @@
 // The `time` library (specs/LANGUAGE.md §7.3): the machine tick counter.
-// `use time;` to pace a game loop.
+// `use time;` then call `time::tick`/`time::wait_next` to pace a game loop.
 
-fn ticks() -> u16 {
+fn tick() -> u16 {
     return peek(0xFF04);
 }
 
 // Block until the machine advances one tick: the frame pacer for game loops.
-fn wait_tick() {
+fn wait_next() {
     var t: u16 = peek(0xFF04);
     while peek(0xFF04) == t { }
 }

@@ -130,6 +130,27 @@ fn printable(ch: u8) -> char {
     }
 }
 
+/// The one-line status bar: tick/state normally, or — when the program
+/// wrote something via `debug::print*` this tick (D025) — that text
+/// instead. No scrollback (a known v1 limitation, not a permanent one):
+/// the status line always shows "this tick's latest debug text," matching
+/// `Machine::debug_output()`'s replace-not-accumulate model.
+fn status_line(machine: &Machine) -> String {
+    if !machine.debug_output().is_empty() {
+        let text = String::from_utf8_lossy(machine.debug_output());
+        let text = text.trim_end_matches('\n').replace('\n', " ");
+        let text: String = text.chars().take(60).collect();
+        return format!(" S16 | debug: {text} | esc quits ");
+    }
+    let state = match machine.cpu.state {
+        State::Running => "running".to_string(),
+        State::Halted => "halted".to_string(),
+        State::DebugHalt => "BRK - press r to resume".to_string(),
+        State::Faulted(f) => format!("FAULT {} ({f:?}) at PC={:#06X}", f.code(), machine.cpu.pc),
+    };
+    format!(" S16 | tick {:5} | {state} | esc quits ", machine.ticks)
+}
+
 fn draw(out: &mut io::Stdout, mem: &[u8; MEMORY_SIZE], machine: &Machine) -> io::Result<()> {
     let mut current_attr: Option<u8> = None;
     for row in 0..mmio::FB_ROWS {
@@ -155,13 +176,7 @@ fn draw(out: &mut io::Stdout, mem: &[u8; MEMORY_SIZE], machine: &Machine) -> io:
         }
     }
 
-    let state = match machine.cpu.state {
-        State::Running => "running".to_string(),
-        State::Halted => "halted".to_string(),
-        State::DebugHalt => "BRK - press r to resume".to_string(),
-        State::Faulted(f) => format!("FAULT {} ({f:?}) at PC={:#06X}", f.code(), machine.cpu.pc),
-    };
-    let status = format!(" S16 | tick {:5} | {state} | esc quits ", machine.ticks);
+    let status = status_line(machine);
     queue!(
         out,
         SetAttribute(Attribute::Reset),
@@ -212,5 +227,22 @@ mod tests {
         assert_eq!(printable(b'A'), 'A');
         assert_eq!(printable(0x1B), '?', "escape byte must not reach the terminal");
         assert_eq!(printable(0xFF), '?');
+    }
+
+    #[test]
+    fn status_line_shows_debug_output_when_present() {
+        let mut mem = vec![0u8; MEMORY_SIZE];
+        let text = b"Hello!";
+        mem[mmio::DEBUG_BUF as usize..mmio::DEBUG_BUF as usize + text.len()].copy_from_slice(text);
+        mem[mmio::DEBUG_LEN as usize] = text.len() as u8;
+        let mut mem: Box<[u8; MEMORY_SIZE]> = mem.into_boxed_slice().try_into().unwrap();
+
+        let mut machine = Machine::new(1);
+        machine.tick(&mut mem, 0, 100);
+        assert!(status_line(&machine).contains("debug: Hello!"), "{}", status_line(&machine));
+
+        // Next tick with no new writes: debug text goes away, tick/state text returns.
+        machine.tick(&mut mem, 0, 100);
+        assert!(status_line(&machine).contains("tick"));
     }
 }

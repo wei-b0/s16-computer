@@ -60,6 +60,10 @@ pub enum TExprKind {
     /// `operands` is the shared operand type — what decides signed vs
     /// unsigned branches/shifts. For arithmetic it equals the result type.
     Binary { op: BinOp, operands: Scalar, lhs: Box<TExpr>, rhs: Box<TExpr> },
+    /// A string-literal call argument (D024) — `ty: None`, since it isn't a
+    /// `Scalar`-typed value; can only ever appear inside a `Call`/`Builtin`
+    /// argument list, never as a standalone statement or operand.
+    Str(Vec<u8>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,7 +95,7 @@ struct StaticInfo {
 struct Globals {
     consts: HashMap<String, (Scalar, u16)>,
     statics: HashMap<String, StaticInfo>,
-    fns: HashMap<String, (Vec<Scalar>, Option<Scalar>)>,
+    fns: HashMap<String, (Vec<ParamKind>, Option<Scalar>)>,
 }
 
 impl Globals {
@@ -140,7 +144,7 @@ pub fn check(items: &[Item]) -> Result<Program, CompileError> {
                 if globals.defined(&f.name) {
                     return Err(err(f.pos, format!("`{}` is already defined", f.name)));
                 }
-                let params = f.params.iter().map(|(_, ty, _)| *ty).collect();
+                let params = f.params.iter().map(|(_, k, _)| *k).collect();
                 globals.fns.insert(f.name.clone(), (params, f.ret));
             }
             Item::Use(_) => unreachable!("imports::resolve strips Use items before check()"),
@@ -372,13 +376,19 @@ fn check_fn(f: &FnItem, globals: &Globals) -> Result<TFn, CompileError> {
         loop_depth: 0,
         ret: f.ret,
     };
-    for (name, ty, pos) in &f.params {
+    for (name, kind, pos) in &f.params {
         if cx.scopes[0].contains_key(name) {
             return Err(err(*pos, format!("duplicate parameter `{name}`")));
         }
+        // A `str` parameter is only special at the call site (D024) — once
+        // inside the body it's an ordinary `u16` (the string's address).
+        let ty = match kind {
+            ParamKind::Value(s) => *s,
+            ParamKind::Str => Scalar::U16,
+        };
         let slot = cx.next_slot;
         cx.next_slot += 1;
-        cx.scopes[0].insert(name.clone(), (slot, *ty));
+        cx.scopes[0].insert(name.clone(), (slot, ty));
     }
 
     let body = cx.block(&f.body)?;
@@ -605,6 +615,15 @@ impl FnCx<'_> {
                 Ok(TExpr { ty: Some(*to), kind: inner.kind })
             }
             ExprKind::Binary(op, lhs, rhs) => self.binary(*op, lhs, rhs, e.pos, expected),
+            // The parser only ever produces `Str` inside a call's argument
+            // list, and `check_args` intercepts it there before recursing
+            // into `expr`/`value_expr` — so reaching this arm means a
+            // string literal was passed where a plain value is expected
+            // (e.g. a `u16` parameter), not that it's syntactically illegal.
+            ExprKind::Str(_) => Err(err(
+                e.pos,
+                "a string literal can only be used as an argument to a parameter that expects one".into(),
+            )),
         }
     }
 
@@ -704,7 +723,8 @@ impl FnCx<'_> {
                 Builtin::Poke | Builtin::Poke8 => (&[Scalar::U16, Scalar::U16], None),
                 Builtin::Halt | Builtin::Brk => (&[], None),
             };
-            let targs = self.check_args(name, args, params, pos)?;
+            let params: Vec<ParamKind> = params.iter().copied().map(ParamKind::Value).collect();
+            let targs = self.check_args(name, args, &params, pos)?;
             return Ok(TExpr { ty: ret, kind: TExprKind::Builtin(*builtin, targs) });
         }
         let Some((params, ret)) = self.globals.fns.get(name).cloned() else {
@@ -719,7 +739,7 @@ impl FnCx<'_> {
         &mut self,
         name: &str,
         args: &[Expr],
-        params: &[Scalar],
+        params: &[ParamKind],
         pos: Pos,
     ) -> Result<Vec<TExpr>, CompileError> {
         if args.len() != params.len() {
@@ -730,7 +750,19 @@ impl FnCx<'_> {
         }
         args.iter()
             .zip(params)
-            .map(|(a, ty)| self.value_expr(a, Some(*ty)))
+            .map(|(a, kind)| match kind {
+                ParamKind::Value(ty) => self.value_expr(a, Some(*ty)),
+                // A literal embeds its bytes as data and passes the
+                // address; anything else (almost always a `str` parameter
+                // being forwarded, e.g. `println` calling `print(s)`) is
+                // just an ordinary `u16` value by this point (D024 — a
+                // `str` parameter is plain `u16` inside the body) and goes
+                // through the normal value path.
+                ParamKind::Str => match &a.kind {
+                    ExprKind::Str(bytes) => Ok(TExpr { ty: None, kind: TExprKind::Str(bytes.clone()) }),
+                    _ => self.value_expr(a, Some(Scalar::U16)),
+                },
+            })
             .collect()
     }
 }

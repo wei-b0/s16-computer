@@ -13,13 +13,13 @@ static Y: u16 = 12;
 
 fn main() {
     loop {
-        var keys: u16 = read_input();
-        put_cell(X, Y, ' ', BLACK);            // erase old position
-        if key_left(keys)  && X > 0             { X = X - 1; }
-        if key_right(keys) && X < SCREEN_W - 1  { X = X + 1; }
-        if key_up(keys)    && Y > 0             { Y = Y - 1; }
-        if key_down(keys)  && Y < SCREEN_H - 1  { Y = Y + 1; }
-        put_cell(X, Y, '@', GREEN);
-        wait_tick();
+        var keys: u16 = input::read();
+        screen::put(X, Y, ' ', screen::BLACK);            // erase old position
+        if input::key_left(keys)  && X > 0                    { X = X - 1; }
+        if input::key_right(keys) && X < screen::SCREEN_W - 1  { X = X + 1; }
+        if input::key_up(keys)    && Y > 0                    { Y = Y - 1; }
+        if input::key_down(keys)  && Y < screen::SCREEN_H - 1  { Y = Y + 1; }
+        screen::put(X, Y, '@', screen::GREEN);
+        time::wait_next();
     }
 }

@@ -13,6 +13,11 @@ fn error_classes_are_rejected() {
         ("fn main() { var x = ; }", 1, "expected an expression"),
         ("fn main() { if true return; }", 1, "expected `{`"),
         ("fn main() {", 1, "unclosed block"),
+        // string literals (D024): the token only parses in call-argument
+        // position, so it's a syntax error everywhere else
+        ("fn main() { var x: u16 = \"hi\"; }", 1, "expected an expression"),
+        ("fn main() { var b: bool = \"a\" == \"b\"; }", 1, "expected an expression"),
+        ("static A: [u16; 1] = [1];\nfn main() { var y: u16 = A[\"hi\"]; }", 2, "expected an expression"),
         // name
         ("fn main() { x = 1; }", 1, "unknown variable"),
         ("fn main() { var a: u16 = y; }", 1, "unknown name"),
@@ -23,6 +28,10 @@ fn error_classes_are_rejected() {
         ("fn main() { if 1 { } }", 1, "expected `bool`"),
         ("fn f(a: u16) { }\nfn main() { f(true); }", 2, "expected `u16`"),
         ("fn f(a: u16) { }\nfn main() { f(1, 2); }", 2, "expects 1 argument"),
+        // a string literal parses fine as *some* call argument (the parser
+        // doesn't know the callee's signature yet) but is rejected once
+        // check.rs sees it isn't going to a `str` parameter (D024)
+        ("fn f(a: u16) { }\nfn main() { f(\"hi\"); }", 2, "string literal"),
         ("const K: u16 = 1;\nfn main() { K = 2; }", 2, "cannot assign to constant"),
         ("fn main() { return 1; }", 1, "returns no value"),
         ("fn f() -> u16 { return; }\nfn main() { }", 1, "expected `return` with"),

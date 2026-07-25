@@ -38,9 +38,21 @@ pub struct UseItem {
 pub struct FnItem {
     pub name: String,
     pub pos: Pos,
-    pub params: Vec<(String, Scalar, Pos)>,
+    pub params: Vec<(String, ParamKind, Pos)>,
     pub ret: Option<Scalar>,
     pub body: Vec<Stmt>,
+}
+
+/// A function parameter's kind: an ordinary scalar value, or (only legal in
+/// parameter position — never for `var`/`static`/`const`/return types) a
+/// compile-time string-literal argument (LANGUAGE.md §7.5, D024). `Str` is
+/// not a general type: inside the function body the parameter is just a
+/// `u16` (the string's address) — the restriction is purely about what's a
+/// legal *argument expression* at the call site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamKind {
+    Value(Scalar),
+    Str,
 }
 
 #[derive(Debug)]
@@ -115,6 +127,10 @@ pub enum ExprKind {
     Unary(UnOp, Box<Expr>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Cast(Box<Expr>, Scalar),
+    /// A string literal (`"..."`) — legal only as a direct call argument to
+    /// a `str`-kind parameter (D024); the parser never produces this
+    /// anywhere else, and `check::expr` rejects it defensively if it did.
+    Str(Vec<u8>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

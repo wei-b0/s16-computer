@@ -3,6 +3,11 @@
 // hand-written assembly has to build its own stack frames to recurse. In
 // s16c every function gets one for free (CALLING_CONVENTION.md), so
 // recursion is just... calling yourself.
+// Run with:
+//   cargo run -p s16c -- programs/s16c/fib.s16c --bin
+//   cargo run -p s16-emulator -- programs/s16c/fib.bin
+
+use debug;
 
 fn fib(n: u16) -> u16 {
     if n < 2 { return n; }
@@ -10,6 +15,6 @@ fn fib(n: u16) -> u16 {
 }
 
 fn main() {
-    poke(0x8000, fib(10));   // 55
+    debug::print_u16(fib(10));   // 55
     halt();
 }

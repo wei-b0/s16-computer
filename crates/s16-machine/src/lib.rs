@@ -37,6 +37,16 @@ pub mod mmio {
     /// Execution status: low byte = state, high byte = fault code (R).
     pub const STATUS: u16 = 0xFF06;
 
+    /// Debug-console output buffer: the program writes text here (W from
+    /// the CPU's side); the host drains it once per tick (D025). The first
+    /// CPU-writes/host-reads register in the memory map — every other
+    /// device above is host-writes/CPU-reads.
+    pub const DEBUG_BUF: u16 = 0xF800;
+    pub const DEBUG_BUF_CAP: usize = 256;
+    /// How many bytes of DEBUG_BUF are valid (W from the CPU, reset to 0 by
+    /// the host after each drain).
+    pub const DEBUG_LEN: u16 = 0xF900;
+
     /// INPUT register bits.
     pub const KEY_UP: u16 = 1 << 0;
     pub const KEY_DOWN: u16 = 1 << 1;
@@ -77,6 +87,11 @@ pub struct Machine {
     pub cpu: Cpu,
     pub ticks: u16,
     rng: Xorshift16,
+    /// Debug-console text drained during the most recent tick (D025) —
+    /// replaced, not accumulated, each tick, same "reflects current state"
+    /// model as the framebuffer. `debug_output()` gives the valid slice.
+    debug_buf: [u8; mmio::DEBUG_BUF_CAP],
+    debug_len: usize,
 }
 
 impl Machine {
@@ -85,7 +100,15 @@ impl Machine {
             cpu: Cpu::new(),
             ticks: 0,
             rng: Xorshift16::new(rng_seed),
+            debug_buf: [0; mmio::DEBUG_BUF_CAP],
+            debug_len: 0,
         }
+    }
+
+    /// Debug-console text written during the most recent tick, if any
+    /// (empty if the program wrote nothing this tick — D025).
+    pub fn debug_output(&self) -> &[u8] {
+        &self.debug_buf[..self.debug_len]
     }
 
     /// Run one machine tick (specs/MEMORY_MAP.md "Machine Tick"):
@@ -93,7 +116,8 @@ impl Machine {
     /// 1. write `input` to INPUT, advance the RNG into RNG, write the tick
     ///    counter to TICK;
     /// 2. execute up to `budget` instructions;
-    /// 3. update STATUS and increment the tick counter.
+    /// 3. drain DEBUG_BUF/DEBUG_LEN into `debug_output()` and reset
+    ///    DEBUG_LEN to 0; update STATUS and increment the tick counter.
     ///
     /// Returns the number of instructions executed (0 once the CPU has
     /// stopped — device registers still update, so a renderer keeps working).
@@ -103,6 +127,12 @@ impl Machine {
         write16(mem, mmio::TICK, self.ticks);
 
         let steps = self.cpu.run(mem, budget as u64) as u32;
+
+        let len = (read16(mem, mmio::DEBUG_LEN) as usize).min(mmio::DEBUG_BUF_CAP);
+        let base = mmio::DEBUG_BUF as usize;
+        self.debug_buf[..len].copy_from_slice(&mem[base..base + len]);
+        self.debug_len = len;
+        write16(mem, mmio::DEBUG_LEN, 0);
 
         write16(mem, mmio::STATUS, status_word(self.cpu.state));
         self.ticks = self.ticks.wrapping_add(1);
@@ -123,4 +153,9 @@ pub fn status_word(state: State) -> u16 {
 fn write16(mem: &mut [u8; MEMORY_SIZE], addr: u16, value: u16) {
     let i = addr as usize;
     mem[i..i + 2].copy_from_slice(&value.to_le_bytes());
+}
+
+fn read16(mem: &[u8; MEMORY_SIZE], addr: u16) -> u16 {
+    let i = addr as usize;
+    u16::from_le_bytes([mem[i], mem[i + 1]])
 }

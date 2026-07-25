@@ -1,5 +1,5 @@
 // The `screen` library (specs/LANGUAGE.md §7.1): the 40x25 character
-// display. `use screen;` to draw.
+// display. `use screen;` then call `screen::put`, `screen::print`, etc.
 
 const SCREEN_W: u16 = 40;
 const SCREEN_H: u16 = 25;
@@ -19,23 +19,34 @@ fn cell_addr(x: u16, y: u16) -> u16 {
     return 0xF000 + (y * SCREEN_W + x) * 2;
 }
 
-fn put_cell(x: u16, y: u16, glyph: u16, color: u16) {
+fn put(x: u16, y: u16, glyph: u16, color: u16) {
     poke(cell_addr(x, y), (color << 8) | glyph);
 }
 
 // The glyph currently at (x, y) — read the screen back for collision checks.
-fn get_cell(x: u16, y: u16) -> u16 {
+fn get(x: u16, y: u16) -> u16 {
     return peek(cell_addr(x, y)) & 0x00FF;
 }
 
-fn clear_screen() {
+fn clear() {
     var y: u16 = 0;
     while y < SCREEN_H {
         var x: u16 = 0;
         while x < SCREEN_W {
-            put_cell(x, y, ' ', BLACK);
+            put(x, y, ' ', BLACK);
             x = x + 1;
         }
         y = y + 1;
+    }
+}
+
+// Draw a string left-to-right starting at (x, y), one glyph per cell.
+fn print(x: u16, y: u16, s: str, color: u16) {
+    var i: u16 = 0;
+    loop {
+        var b: u16 = peek8(s + i);
+        if b == 0 { break; }
+        put(x + i, y, b, color);
+        i = i + 1;
     }
 }

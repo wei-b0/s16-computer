@@ -259,3 +259,52 @@ Consequences:
 - Every non-trivial program now opens with a handful of `use` lines — a small, permanent bit of ceremony traded for visible dependencies
 - A call to a real library function whose library wasn't `use`d gets a specific "add `use X;`" diagnostic rather than a bare unknown-name error, so the fix is discoverable without consulting the library reference
 - Still no package manager: the four libraries are a fixed, compiler-shipped set; `use` names a library, not a file path
+
+## D023: Module-Qualified Standard Library Calls
+
+Decision:
+Every standard-library call is written `module::name` — `screen::put`, `debug::print_u16`, `rng::next` — layered on top of D022's `use module;` requirement, not a replacement for it. There is no bare-name fallback after `use`, and no `use module::item;` single-item import form; the only way to call a library item is its full qualified path.
+
+Reason:
+D022 made a program's *file* say what it depends on, via its `use` lines — but any individual *call site* still looked identical to a call to the program's own code. Rust's fully-qualified paths (`std::mem::swap(...)`, valid with no `use` at all) are the closer model than Rust's `use`-then-bare-name convenience: `screen::put(...)` names its own dependency on sight, without cross-referencing the file's `use` lines. This also turns the standard library into five genuinely independent namespaces instead of one shared flat one — two libraries can now define an internal helper with the same name (`write_byte` in both `screen` and `debug`) without colliding, something D020's single flat namespace could not allow.
+
+Consequences:
+
+- D020's whole-namespace shadowing rule is gone (see D022's note above) — impossible to trigger, not just discouraged, since a program can never write `::` in a name it defines
+- `imports.rs` gained real per-library resolution logic (bare names inside a library body resolve within that library; qualified names from user code resolve against their named library); `check.rs` and `codegen.rs` needed no structural changes, since a qualified name is just an ordinary string that happens to contain `::`
+- Every call site is self-documenting about which library it depends on, at the cost of the `module::` prefix on every single call — a program calling `put` fifty times writes `screen::put` fifty times, with no shorthand
+
+## D024: String Literals Are Call-Argument-Only, Not a Type
+
+Decision:
+`"..."` is legal in exactly one place: as a direct argument to a parameter declared `str` — a marker legal only in function-parameter position (never for `var`/`static`/`const`/return types). `str` is not a general type: inside the function body the parameter is an ordinary `u16` (the literal's compile-time address, in the data section). Enforced at parse time, not just by the type checker — no other rule in the grammar ever accepts a string token.
+
+Reason:
+`debug::print("Hello")` and `screen::print(x, y, "Hello", color)` need *some* way to pass text, but a general string type would mean deciding what a string variable holds, how it's compared, whether it can grow — none of which this project wants (D015's no-heap stance, D014's word-sized-types-only model). A string literal is compile-time data plus an address, and nothing else needs to exist for that: no `String`, no runtime concatenation, no heap.
+
+Consequences:
+
+- No `var`/`static` can ever hold a string literal — `var x: u16 = "hi";` is a parse error, not a type error, since the grammar's only string-accepting production is a call argument
+- `debug::print`/`println` and `screen::print` are the only v1 functions with a `str` parameter; a user *can* declare their own `fn f(s: str)` (nothing stops it, per D020's "library is ordinary s16c" precedent — `str` params aren't special-cased to standard-library code)
+- A `str` parameter's *argument*, unlike the literal token itself, isn't restricted to a literal — an ordinary `u16` expression type-checks too (discovered necessary during implementation: `debug::println`'s own body forwards its `s` parameter to `debug::print(s)`, and `s` there is just a local variable, not a literal). Once a value has entered a program as a `str` parameter, passing it onward is an ordinary value pass, with the same "no bounds checking" caveat as array indexing — nothing stops passing an unrelated `u16` where a string address is expected
+- Codegen emits string bytes as `.byte` (not `.asciiz`) specifically because the assembler's string-escaping only covers ASCII plus seven named escapes and can't round-trip arbitrary byte values — `.byte`'s numeric form has no such gap
+
+## D025: A Debug-Console MMIO Device, Drained Per Tick
+
+Decision:
+A 256-byte buffer at `0xF800` (`DEBUG_BUF`) plus a length register at `0xF900` (`DEBUG_LEN`) — the program writes text via `poke8`, incrementing `DEBUG_LEN` as it goes; the host reads it once per tick and resets `DEBUG_LEN` to `0` (`Machine::tick`, matching D011's per-tick device-servicing model). Batch mode, which doesn't tick, gets one narrow exception: a single final read after the CPU stops, so a non-interactive program can still print a result.
+
+Reason:
+Games and simple examples alike had no way to get a bare computed value out of a program short of `poke`ing it to a fixed address and reading memory directly from Rust (or drawing it to the framebuffer, if the program already touched the screen for something else). Every other device on this map is host-writes/CPU-reads (INPUT, RNG, TICK, STATUS); a debug console needed to go the other direction, and the memory-mapped, once-per-tick model already established for every other device (D007, D011) extends cleanly to that direction too — the framebuffer is a close analogy, just written by the CPU and sampled by the host instead of the reverse.
+
+Consequences:
+
+- The memory map's first CPU-writes/host-reads register — everything else on the page is the other way around
+- Host-agnostic by construction: the local emulator prints/shows it (batch: one-shot final read; `--tui`: the status bar, replacing tick/state text for the tick that produced it); a future Solana host could map the same bytes to program logs, or ignore them entirely, with no change to `debug.s16c` or the device itself
+- A single tick's (or, in batch mode, a whole run's) debug output is capped at 256 bytes — writes past capacity are silently dropped (`debug.s16c`'s `write_byte` checks `DEBUG_LEN` before writing), the same class of documented sharp edge as unchecked array indexing (LANGUAGE.md §6)
+- No scrollback in `--tui` mode in v1 — the status bar always shows only the most recent tick's debug text library calls are now module-qualified
+(`screen::put`, not bare `put`), so the shadowing behavior described above
+and in D020 no longer applies — a program's own names and a library's
+qualified names can't collide in the first place, so there's nothing left
+to shadow. `use` itself is unchanged: still required, still gates
+visibility exactly as described here.*
