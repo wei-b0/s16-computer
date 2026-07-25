@@ -1,8 +1,8 @@
 // walk.s16c — arrow keys move '@' around the display.
 // Written entirely against the standard library (screen/input/time) — no
 // raw addresses. Build and run:
-//   cargo run -p s16c -- programs/walk.s16c --bin
-//   cargo run -p s16-emulator -- --tui programs/walk.bin
+//   cargo run -p s16c -- programs/s16c/walk.s16c --bin
+//   cargo run -p s16-emulator -- --tui programs/s16c/walk.bin
 
 use screen;
 use input;

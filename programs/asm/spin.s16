@@ -1,7 +1,7 @@
 ; spin.s16 — a spinner at the center of the display, animated from TICK.
 ; The first "machine loop" program: it never halts. It redraws every pass,
 ; deriving the frame from the TICK register, exactly how a game paces itself.
-; Run with: cargo run -p s16-emulator -- --tui programs/spin.bin  (esc quits)
+; Run with: cargo run -p s16-emulator -- --tui programs/asm/spin.bin  (esc quits)
 
         LDI  R5, #0xFF00     ; device registers
 

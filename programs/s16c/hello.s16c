@@ -1,0 +1,19 @@
+// hello.s16c — write "HELLO, S16!" into the framebuffer.
+// The s16c counterpart to programs/asm/hello.s16: put_cell instead of
+// hand-computing the framebuffer address and packing the attribute byte.
+// See it on screen:
+//   cargo run -p s16c -- programs/s16c/hello.s16c --bin
+//   cargo run -p s16-emulator -- --tui programs/s16c/hello.bin
+
+use screen;
+
+static MSG: [u16; 11] = ['H', 'E', 'L', 'L', 'O', ',', ' ', 'S', '1', '6', '!'];
+
+fn main() {
+    var i: u16 = 0;
+    while i < 11 {
+        put_cell(i, 0, MSG[i], WHITE);
+        i = i + 1;
+    }
+    halt();
+}

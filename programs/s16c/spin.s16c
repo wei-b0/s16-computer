@@ -1,0 +1,20 @@
+// spin.s16c — a spinner at the center of the display, animated from TICK.
+// The s16c counterpart to programs/asm/spin.s16: ticks() instead of
+// peeking the TICK device register directly, and wait_tick() to pace one
+// redraw per tick instead of busy-redrawing every instruction.
+// Run with:
+//   cargo run -p s16c -- programs/s16c/spin.s16c --bin
+//   cargo run -p s16-emulator -- --tui programs/s16c/spin.bin  (esc quits)
+
+use screen;
+use time;
+
+static FRAMES: [u16; 4] = ['|', '/', '-', '\\'];
+
+fn main() {
+    loop {
+        var frame: u16 = (ticks() >> 3) & 3;   // new frame every 8 ticks, 4 frames
+        put_cell(20, 12, FRAMES[frame], GREEN);
+        wait_tick();
+    }
+}

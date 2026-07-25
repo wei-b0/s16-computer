@@ -1,0 +1,25 @@
+// calls.s16c — sum of squares of a list: 1+4+9+16 = 30.
+// The s16c counterpart to programs/asm/calls.s16: ordinary function calls
+// (square, sum_squares) instead of hand-written CALL/RET and PUSH/POP —
+// the compiler builds the stack frames and preserves what needs preserving.
+
+static DATA: [u16; 4] = [1, 2, 3, 4];
+
+fn square(n: u16) -> u16 {
+    return n * n;
+}
+
+fn sum_squares(len: u16) -> u16 {
+    var total: u16 = 0;
+    var i: u16 = 0;
+    while i < len {
+        total = total + square(DATA[i]);
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() {
+    poke(0x8000, sum_squares(4));   // 30
+    halt();
+}

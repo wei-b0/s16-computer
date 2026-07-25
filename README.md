@@ -12,7 +12,8 @@ A 16-bit computer implemented as a Solana program — eventually running snake o
 | [crates/s16-emulator](crates/s16-emulator/) | Local emulator: batch runs, or `--tui` for display + keyboard in the terminal |
 | [crates/s16-asm](crates/s16-asm/) | Assembler: `.s16` source → flat binary image |
 | [crates/s16c](crates/s16c/) | Compiler for [s16c](specs/LANGUAGE.md), the tiny Rust-flavored game language |
-| [programs/](programs/) | Example programs: assembly (`sum`, `fib`, `calls`, `hello`, `spin`) and s16c (`walk`) |
+| [programs/s16c/](programs/s16c/) | Example programs written in s16c, the default way to write S16 programs: `sum`, `fib`, `calls`, `hello`, `spin`, `walk` |
+| [programs/asm/](programs/asm/) | The same `sum`/`fib`/`calls`/`hello`/`spin` examples written directly in assembly, one level down |
 | [docs/](docs/) | How-to guides: getting started, writing programs, debugging, embedding the CPU |
 
 Planned: `s16-program` (the Solana program), `snake` (in s16c).
@@ -23,10 +24,11 @@ Planned: `s16-program` (the Solana program), `snake` (in s16c).
 cargo build            # everything
 cargo test             # spec test vectors pin core, assembler, machine, and compiler to specs/
 
-cargo run -p s16-asm -- programs/sum.s16             # assemble -> programs/sum.bin
-cargo run -p s16-emulator -- programs/sum.bin        # batch: run CPU, print registers
-cargo run -p s16-emulator -- --tui programs/spin.bin # interactive machine (esc quits)
+cargo run -p s16c -- programs/s16c/walk.s16c --bin        # compile s16c -> programs/s16c/walk.bin
+cargo run -p s16-emulator -- --tui programs/s16c/walk.bin # play it (arrow keys move the @)
 
-cargo run -p s16c -- programs/walk.s16c --bin        # compile s16c -> programs/walk.bin
-cargo run -p s16-emulator -- --tui programs/walk.bin # play it (arrow keys move the @)
+# or, one level down, raw assembly directly:
+cargo run -p s16-asm -- programs/asm/sum.s16             # assemble -> programs/asm/sum.bin
+cargo run -p s16-emulator -- programs/asm/sum.bin        # batch: run CPU, print registers
+cargo run -p s16-emulator -- --tui programs/asm/spin.bin # interactive machine (esc quits)
 ```

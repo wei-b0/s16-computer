@@ -106,7 +106,7 @@ loop:   LDW  R2, [R5+2]     ; RNG
 fn hello_program_fills_framebuffer() {
     let image = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../programs/hello.s16"
+        "/../../programs/asm/hello.s16"
     ))
     .unwrap();
     let mut mem = load(&image);
@@ -125,7 +125,7 @@ fn hello_program_fills_framebuffer() {
 fn spin_program_animates_from_tick() {
     let source = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../programs/spin.s16"
+        "/../../programs/asm/spin.s16"
     ))
     .unwrap();
     let mut mem = load(&source);

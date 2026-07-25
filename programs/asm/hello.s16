@@ -3,7 +3,7 @@
 ;
 ; The display is a 40x25 grid at 0xF000, 2 bytes per cell:
 ;   byte 0 = character, byte 1 = attribute -> one aligned STW per cell.
-; See it on screen: cargo run -p s16-emulator -- --tui programs/hello.bin
+; See it on screen: cargo run -p s16-emulator -- --tui programs/asm/hello.bin
 ; (Also reads cell (0,0) back into R0, so batch mode shows proof too.)
 
         LDI  R1, #text       ; source string (zero-terminated)

@@ -9,7 +9,7 @@ future Solana program use it.
 ```rust
 use s16_core::{Cpu, State, MEMORY_SIZE};
 
-let program = std::fs::read("programs/sum.bin")?;
+let program = std::fs::read("programs/asm/sum.bin")?;
 
 let mut mem = vec![0u8; MEMORY_SIZE];
 mem[..program.len()].copy_from_slice(&program);

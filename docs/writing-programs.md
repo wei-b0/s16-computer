@@ -1,6 +1,10 @@
 # Writing S16 Programs
 
-A hands-on tutorial. Full syntax lives in
+**This is the assembly s16c compiles to, one level down from
+[writing-s16c.md](writing-s16c.md).** Most programs — games included — are
+better written in s16c; come here if you want to understand what your
+compiled programs turn into, or if you need something the standard library
+doesn't expose. Full syntax lives in
 [specs/ASSEMBLY.md](../specs/ASSEMBLY.md) and instruction semantics in
 [specs/INSTRUCTION_SET.md](../specs/INSTRUCTION_SET.md); this page builds up a
 program the way you actually write one. Assemble and run each step with:
@@ -126,7 +130,7 @@ each tick, the keyboard feeds `INPUT` (arrows/WASD = d-pad, Z = A, X = B,
 Enter = Start), and `RNG`/`TICK` update every tick. A program that never
 `HALT`s — reading input, redrawing, pacing itself on `TICK` — is a *machine
 loop*, and it's how games work here: see
-[programs/spin.s16](../programs/spin.s16) for the minimal example. In batch
+[programs/asm/spin.s16](../programs/asm/spin.s16) for the minimal example. In batch
 mode (no `--tui`) devices stay silent and only the CPU runs.
 
 ## Habits that pay off
@@ -137,6 +141,6 @@ mode (no `--tui`) devices stay silent and only the CPU runs.
 - Stuck? Drop a `BRK` where you want to look around —
   [debugging.md](debugging.md).
 
-Once loops, subroutines, and MMIO feel natural in assembly, most of that
-gets automated: [writing-s16c.md](writing-s16c.md) covers s16c, the small
-Rust-flavored language that compiles down to exactly this.
+Everything here — loops, subroutines, MMIO — is what
+[writing-s16c.md](writing-s16c.md) automates: `while`, function calls, and
+`put_cell`/`read_input` compile straight down to the patterns above.

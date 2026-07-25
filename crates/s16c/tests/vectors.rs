@@ -82,7 +82,7 @@ fn main() {
 fn v4_devices_walk_program() {
     let source = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../programs/walk.s16c"
+        "/../../programs/s16c/walk.s16c"
     ))
     .unwrap();
     let mut mem = build(&source);

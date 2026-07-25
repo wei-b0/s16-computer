@@ -1,0 +1,22 @@
+// sum.s16c — total of five numbers, the s16c counterpart to
+// programs/asm/sum.s16. Doubles as the smallest "compile, run, read a
+// result" example in the language: static array, a loop, poke the answer
+// somewhere inspectable.
+//
+// Batch mode only shows registers, not memory — see "Advanced: talking to
+// hardware directly" in docs/writing-s16c.md for how to read mem[0x8000]
+// back (poke it onto the screen and watch with --tui, or inspect memory
+// directly from Rust).
+
+static DATA: [u16; 5] = [10, 20, 30, 40, 50];
+
+fn main() {
+    var total: u16 = 0;
+    var i: u16 = 0;
+    while i < 5 {
+        total = total + DATA[i];
+        i = i + 1;
+    }
+    poke(0x8000, total);   // 150
+    halt();
+}

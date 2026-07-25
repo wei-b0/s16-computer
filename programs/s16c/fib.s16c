@@ -1,0 +1,15 @@
+// fib.s16c — fib(10), recursively. fib(0)=0, fib(1)=1, fib(10)=55.
+// The s16c counterpart to programs/asm/fib.s16, which is iterative because
+// hand-written assembly has to build its own stack frames to recurse. In
+// s16c every function gets one for free (CALLING_CONVENTION.md), so
+// recursion is just... calling yourself.
+
+fn fib(n: u16) -> u16 {
+    if n < 2 { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() {
+    poke(0x8000, fib(10));   // 55
+    halt();
+}

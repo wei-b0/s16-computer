@@ -293,13 +293,13 @@ fn main() {
 }
 ```
 
-This is [programs/walk.s16c](../programs/walk.s16c) — a `loop { }` that
+This is [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) — a `loop { }` that
 reads input, redraws, and paces itself on `wait_tick()` *is* a game loop,
 the same shape snake will use:
 
 ```sh
-cargo run -p s16c -- programs/walk.s16c --bin
-cargo run -p s16-emulator -- --tui programs/walk.bin   # arrow keys move '@'
+cargo run -p s16c -- programs/s16c/walk.s16c --bin
+cargo run -p s16-emulator -- --tui programs/s16c/walk.bin   # arrow keys move '@'
 ```
 
 **Forget a `use` and the compiler tells you which one:**

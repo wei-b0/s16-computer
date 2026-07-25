@@ -1,6 +1,8 @@
 # Getting Started
 
-Run your first S16 program in about two minutes.
+Run your first S16 program in about two minutes — in **s16c**, the language
+you'll use for everything from here on. (Raw assembly is still there if you
+want it later: [writing-programs.md](writing-programs.md).)
 
 ## 1. Build the toolchain
 
@@ -10,77 +12,67 @@ You need a Rust toolchain (`rustup.rs`). Then, from the repository root:
 cargo build
 ```
 
-That builds everything: the CPU (`s16-core`), the assembler (`s16-asm`), and
-the emulator (`s16-emulator`).
+That builds everything: the CPU (`s16-core`), the assembler (`s16-asm`), the
+compiler (`s16c`), and the emulator (`s16-emulator`).
 
-## 2. Assemble a program
+## 2. Compile and run
 
-The repository ships with [programs/sum.s16](../programs/sum.s16), which sums
-five numbers:
-
-```sh
-cargo run -p s16-asm -- programs/sum.s16
-```
-
-```
-programs/sum.s16 -> programs/sum.bin (54 bytes)
-```
-
-`sum.bin` is a flat memory image: the bytes that will sit in the machine's
-memory starting at address `0x0000`. Use `-o other.bin` to pick the output
-name.
-
-## 3. Run it
+The repository ships with
+[programs/s16c/walk.s16c](../programs/s16c/walk.s16c), a small program that
+moves an `@` around the screen with the arrow keys:
 
 ```sh
-cargo run -p s16-emulator -- programs/sum.bin
+cargo run -p s16c -- programs/s16c/walk.s16c --bin
+cargo run -p s16-emulator -- --tui programs/s16c/walk.bin
 ```
 
+A green `@` appears on a 40×25 screen. Arrow keys move it; esc quits.
+
+## 3. Read what happened
+
+- **`--bin`** chains the compiler and the assembler in one step: `.s16c`
+  source → readable `.s16` assembly → a flat binary image, the bytes that
+  sit in the machine's memory starting at `0x0000`.
+- **`--tui`** runs the full *machine* — display, keyboard, timers — in your
+  terminal, not just the bare CPU. That's what lets you see the screen and
+  press arrow keys; more on the CPU-alone "batch" mode in
+  [writing-programs.md](writing-programs.md).
+- The status bar shows the tick count and CPU state; esc quits cleanly.
+
+`walk.s16c` itself is short — `use screen; use input; use time;`, then a
+`loop` that reads the keys, erases the old position, redraws at the new one,
+and paces itself with `wait_tick()`. No raw addresses anywhere; that's the
+point of s16c's standard library (more in
+[writing-s16c.md](writing-s16c.md)).
+
+## 4. Change something
+
+Open [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) and change the
+color:
+
+```rust
+put_cell(X, Y, '@', GREEN);
 ```
-halted after 41 instructions
-PC=0x002C  SP=0xF000  FLAGS=0b0001
-R0 =0x0096  R1 =0x0036  R2 =0x0000  R3 =0x0032
-R4 =0x0000  ...
-```
 
-## 4. Read the output
+to `YELLOW` (or any of `BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN
+WHITE`). Recompile and rerun — same two commands as step 2. That's the whole
+loop: edit `.s16c`, `--bin`, run, look.
 
-- **`halted after 41 instructions`** — the program reached `HALT` cleanly.
-  You can also see `hit BRK` (a breakpoint), `FAULT ...` (the program did
-  something illegal — see [debugging.md](debugging.md)), or `still running`
-  (the safety budget of 100 M instructions ran out, i.e. probably an infinite
-  loop).
-- **`R0 =0x0096`** — `sum.s16` leaves its result in R0, and `0x0096` is 150 =
-  10+20+30+40+50. Registers are always printed in hex.
-- **`PC=0x002C`** — where execution stopped: just past the `HALT` at `0x0028`.
-- The emulator's exit code is 0 for a clean stop (`HALT`/`BRK`) and 1 for
-  anything else, so you can use it in scripts and CI.
+## 5. See the assembly it compiles to
 
-## 5. Change something
-
-Open [programs/sum.s16](../programs/sum.s16), change the data line:
-
-```asm
-data:   .word 100, 200, 300, 400, 500
-```
-
-Reassemble and rerun — R0 is now `0x05DC` (1500). That's the whole loop:
-edit `.s16`, assemble, run, read registers.
-
-## 6. See the machine run
-
-Batch mode is the CPU alone. `--tui` runs the *machine* — display, keyboard,
-timers — in your terminal:
+Drop `--bin` and `s16c` writes readable `.s16` text instead of a binary
+image:
 
 ```sh
-cargo run -p s16-asm -- programs/hello.s16
-cargo run -p s16-emulator -- --tui programs/hello.bin   # HELLO, S16! on screen
-cargo run -p s16-asm -- programs/spin.s16
-cargo run -p s16-emulator -- --tui programs/spin.bin    # animation from TICK
+cargo run -p s16c -- programs/s16c/walk.s16c    # writes programs/s16c/walk.s16
 ```
 
-Esc quits. The status bar shows the tick count and CPU state; `--seed N` sets
-the RNG seed, `--budget N` the instructions per tick.
+That output is ordinary S16 assembly — the same language as the hand-written
+programs in `programs/asm/`, nothing about compiler output is special-cased.
+Worth a skim once you're curious what `put_cell(...)` actually turns into.
 
-Next: [writing-programs.md](writing-programs.md) to write your own program
-from scratch.
+Next: [writing-s16c.md](writing-s16c.md) for the full language tutorial —
+types, control flow, functions, the standard library. If you'd rather work
+one level down, in the assembly s16c itself compiles to,
+[writing-programs.md](writing-programs.md) starts from scratch there
+instead.
