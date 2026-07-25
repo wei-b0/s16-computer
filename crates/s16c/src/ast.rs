@@ -24,6 +24,14 @@ pub enum Item {
     Fn(FnItem),
     Static(StaticItem),
     Const(ConstItem),
+    Use(UseItem),
+}
+
+/// `use screen;` — pulls in a named standard library (LANGUAGE.md §7).
+#[derive(Debug)]
+pub struct UseItem {
+    pub name: String,
+    pub pos: Pos,
 }
 
 #[derive(Debug)]

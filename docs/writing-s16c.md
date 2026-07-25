@@ -4,58 +4,56 @@ A hands-on tutorial for **s16c**, the tiny Rust-flavored language that
 compiles to S16 assembly. Full grammar and semantics live in
 [specs/LANGUAGE.md](../specs/LANGUAGE.md); the compiler's own contract
 (CLI, diagnostics, what emitted code must do) is
-[specs/COMPILER.md](../specs/COMPILER.md). This page builds programs the way
-you actually write them. If you haven't written raw S16 assembly yet,
-[writing-programs.md](writing-programs.md) is worth a skim first — s16c
-compiles down to exactly what that page teaches, and knowing the target
-makes the compiler's behavior predictable rather than magic.
+[specs/COMPILER.md](../specs/COMPILER.md).
+
+**s16c is a game language with hardware access available, not a hardware
+language you happen to write games in.** Almost everything below is written
+against small, explicitly imported standard libraries — `use screen;` gets
+you `put_cell`, `use input;` gets you `read_input` — not raw memory
+addresses. Nothing from a library is visible until you `use` it: this is
+deliberately C's `#include` model, not an always-there prelude, so a
+program's dependencies are visible in its own source. The raw addresses are
+still there if you ever need them (§
+[Advanced: talking to hardware directly](#advanced-talking-to-hardware-directly)),
+but you won't need them to make Pong.
 
 Compile and run each example with:
 
 ```sh
-cargo run -p s16c -- yourfile.s16c --bin && cargo run -p s16-emulator -- yourfile.bin
+cargo run -p s16c -- yourfile.s16c --bin && cargo run -p s16-emulator -- --tui yourfile.bin
 ```
 
-`--bin` chains the assembler so you get a runnable image in one step. Drop
-`--bin` and `s16c` emits readable `.s16` assembly text instead — useful any
-time you want to see exactly what your program compiled to (more on that in
-[Reading the generated assembly](#reading-the-generated-assembly)).
+`--bin` chains the assembler so you get a runnable image in one step;
+`--tui` runs the interactive machine so you can actually watch the screen.
+Drop `--bin` and `s16c` emits readable `.s16` assembly text instead — more
+on that in [Reading the generated assembly](#reading-the-generated-assembly).
 
-## The smallest program
+## Your first screen
 
 ```rust
+use screen;
+
 fn main() {
-    poke(0x8000, 42);
+    clear_screen();
+    put_cell(20, 12, '@', GREEN);
     halt();
 }
 ```
 
-Every program needs `fn main()` — no parameters, no return type — and it's
-where execution begins. `poke`/`peek` are the language's entire I/O surface
-(§7 below); there's no `println!`, because there's nowhere for text to go
-except memory. `halt()` stops the CPU, same as the assembly `HALT`.
+Run it with `--tui` and a green `@` sits in the middle of an otherwise
+blank 40×25 screen. `use screen;` pulls in the screen library; without that
+line, `clear_screen`/`put_cell`/`GREEN` don't exist as far as the compiler
+is concerned. Three calls, no addresses: `clear_screen()` blanks every
+cell, `put_cell(x, y, glyph, color)` draws one, `halt()` stops the CPU.
+`GREEN` is one of nine color constants
+(`BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN WHITE`) the library
+predefines for you.
 
-Compile it and the batch emulator confirms a clean stop:
-
-```
-halted after 10 instructions
-```
-
-Notice batch mode's register dump won't show you `0x8000` — it only prints
-registers, and s16c keeps everything in memory or on the stack, never
-parked in a register for you to find. To actually see a result, either poke
-it onto the **framebuffer** and watch with `--tui` (the natural way once you
-have a screen — §7), or check memory directly the way the compiler's own
-test suite does, from Rust (see
-[using-s16-core.md](using-s16-core.md#writing-tests-against-the-cpu)):
-
-```rust
-let image = s16_asm::assemble(&s16c::compile(source)?)?;
-// ...load into memory, cpu.run(...), then read mem[0x8000..0x8002]
-```
-
-Keep that trick in your pocket — the rest of this guide uses it implicitly
-whenever an example "produces" a value.
+`clear_screen`, `put_cell`, `GREEN` — none of these are keywords. They're
+ordinary functions and constants from the **screen library**, one of four
+standard libraries (more on that in
+[The standard library](#the-standard-library)). You could write your own
+versions of any of them, and yours would win.
 
 ## Types: u16, i16, bool
 
@@ -66,16 +64,20 @@ is logical for `u16` but sign-extending for `i16`.
 
 ```rust
 fn main() {
-    let dx: i16 = -3;
-    let steps: u16 = 5;
+    var dx: i16 = -3;
+    var steps: u16 = 5;
     poke(0x8000, (dx as u16) + steps);   // 0x0002
     halt();
 }
 ```
 
-`0x8000` holds `0x0002`: `-3 as u16` is `0xFFFD`, and `0xFFFD + 5` wraps to
-`2` — all arithmetic wraps mod 2¹⁶, matching the CPU, with no overflow traps
-(a deliberate divergence from Rust's debug-mode panics).
+(That's `poke` — the low-level escape hatch, covered below — used here
+only to park a result somewhere inspectable; see the note in
+[Advanced: talking to hardware directly](#advanced-talking-to-hardware-directly)
+about how to actually observe it.) `0x8000` ends up holding `0x0002`:
+`-3 as u16` is `0xFFFD`, and `0xFFFD + 5` wraps to `2` — all arithmetic
+wraps mod 2¹⁶, matching the CPU, with no overflow traps (a deliberate
+divergence from Rust's debug-mode panics).
 
 **There's no implicit conversion between `u16` and `i16`.** Mixing them
 without an explicit `as` is a compile error:
@@ -89,15 +91,15 @@ for
 
 ```rust
 fn main() {
-    let a: u16 = 1;
-    let b: i16 = -1;
-    let c: u16 = a + b;   // <- here
+    var a: u16 = 1;
+    var b: i16 = -1;
+    var c: u16 = a + b;   // <- here
     halt();
 }
 ```
 
 Integer literals adapt to whatever type context expects (default `u16` if
-none), so `let x: i16 = 10;` just works — the mismatch error only shows up
+none), so `var x: i16 = 10;` just works — the mismatch error only shows up
 when two *typed* values of different signedness meet.
 
 Division and modulo (`/`, `%`) are **`u16`-only** in v1 — the CPU's `DIV`
@@ -116,8 +118,8 @@ braces (no bare `if cond stmt;`) and there's no `if` used as an expression:
 
 ```rust
 fn main() {
-    let total: u16 = 0;
-    let i: u16 = 1;
+    var total: u16 = 0;
+    var i: u16 = 1;
     while i <= 10 {
         total = total + i;
         i = i + 1;
@@ -129,7 +131,12 @@ fn main() {
 
 `loop { }` runs forever until `break`; `continue` skips to the next
 iteration. Both only make sense inside a loop — using either at the top
-level is a compile error (`break outside of a loop`), same as Rust.
+level is a compile error:
+
+```
+$ s16c bad.s16c
+bad.s16c:2:5: `break` outside of a loop
+```
 
 Conditions must be `bool` — there's no C-style "any nonzero value is
 truthy":
@@ -149,8 +156,9 @@ C's), so
 if keys & KEY_LEFT != 0 { ... }
 ```
 
-parses as `(keys & KEY_LEFT) != 0` — what you want. If you ever need the
-other grouping, add parens.
+parses as `(keys & KEY_LEFT) != 0` — what you want. (You'll rarely write
+raw bitmask checks like this anyway — see `key_left(keys)` below — but it
+matters the moment you touch a bitmask directly.)
 
 ## Functions and recursion
 
@@ -197,7 +205,7 @@ static SCORES: [u16; 5] = [10, 20, 30, 40, 50];
 static TOTAL: u16 = 0;
 
 fn main() {
-    let i: u16 = 0;
+    var i: u16 = 0;
     while i < 5 {
         TOTAL = TOTAL + SCORES[i];
         i = i + 1;
@@ -211,12 +219,10 @@ fn main() {
 matching S16's memory model where everything is already one big mutable
 address space (D001). Initializers must be constant expressions (literals,
 `const`s, arithmetic on them) — a function call in a static initializer is
-rejected:
-
-```
-$ s16c bad.s16c
-bad.s16c:2:19: not a constant expression
-```
+rejected. Also note **locals use `var`, not `let`**: s16c has only one kind
+of local and it's always mutable, so there's no `mut` to opt into (D021) —
+one deliberate point of surface divergence from Rust, called out so it
+never surprises you mid-program.
 
 Array indexing is **not bounds-checked** at runtime — `SCORES[10]` compiles
 fine and reads whatever memory the address arithmetic lands on. This is a
@@ -224,17 +230,126 @@ sharp edge inherited from having no runtime beyond the CPU itself; keep
 loop bounds tied to the array's declared length (as above), and it never
 comes up in practice.
 
-## Talking to the hardware
+## The standard library
 
-`peek`/`poke` (word) and `peek8`/`poke8` (byte) are the entire I/O surface —
-no pointer types exist in s16c at all, just these six builtins
-(LANGUAGE.md §7). Devices are memory
-([specs/MEMORY_MAP.md](../specs/MEMORY_MAP.md)), so this is genuinely
-enough: reading `INPUT`, writing the framebuffer, seeding from `RNG`, are
-all `peek`/`poke` calls at the right address.
+Everything you've used so far except `poke` — `clear_screen`, `put_cell`,
+`GREEN` — comes from the **standard library**: four small, separately
+importable libraries for screen, input, time, and randomness (LANGUAGE.md
+§7), written in s16c itself. `use` the ones you need; the rest simply don't
+exist as far as your program is concerned.
 
-Character literals (`'H'`) make writing to the display straightforward —
-there are no string literals in v1, so text is one `poke` per cell:
+### `use screen;`
+
+| Call | Effect |
+|------|--------|
+| `SCREEN_W`, `SCREEN_H` | `40`, `25` — the display size |
+| `put_cell(x, y, glyph, color)` | draw one character cell |
+| `get_cell(x, y) -> u16` | read back the glyph at `(x, y)` — for collision checks |
+| `clear_screen()` | blank the whole screen |
+| `BLACK GRAY RED GREEN YELLOW BLUE MAGENTA CYAN WHITE` | color constants |
+
+### `use input;`
+
+| Call | Effect |
+|------|--------|
+| `read_input() -> u16` | the current key bitmask |
+| `key_up/down/left/right/a/b/start/select(keys) -> bool` | test one key from a `read_input()` bitmask |
+
+### `use time;`
+
+| Call | Effect |
+|------|--------|
+| `ticks() -> u16` | the machine's current tick count |
+| `wait_tick()` | block until the next tick — the standard way to pace a game loop |
+
+### `use random;`
+
+| Call | Effect |
+|------|--------|
+| `random(max) -> u16` | a pseudorandom value in `0..max` |
+
+Put together, this is enough for a complete interactive program — no raw
+addresses anywhere:
+
+```rust
+use screen;
+use input;
+use time;
+
+static X: u16 = 20;
+static Y: u16 = 12;
+
+fn main() {
+    loop {
+        var keys: u16 = read_input();
+        put_cell(X, Y, ' ', BLACK);             // erase old position
+        if key_left(keys)  && X > 0             { X = X - 1; }
+        if key_right(keys) && X < SCREEN_W - 1  { X = X + 1; }
+        if key_up(keys)    && Y > 0             { Y = Y - 1; }
+        if key_down(keys)  && Y < SCREEN_H - 1  { Y = Y + 1; }
+        put_cell(X, Y, '@', GREEN);
+        wait_tick();
+    }
+}
+```
+
+This is [programs/walk.s16c](../programs/walk.s16c) — a `loop { }` that
+reads input, redraws, and paces itself on `wait_tick()` *is* a game loop,
+the same shape snake will use:
+
+```sh
+cargo run -p s16c -- programs/walk.s16c --bin
+cargo run -p s16-emulator -- --tui programs/walk.bin   # arrow keys move '@'
+```
+
+**Forget a `use` and the compiler tells you which one:**
+
+```
+$ s16c bad.s16c
+bad.s16c:2:5: unknown function `put_cell` (found in library `screen` — add `use screen;`)
+```
+
+That's a call to `put_cell` with no `use screen;` anywhere in the file —
+the error names the missing library instead of just saying "unknown
+function." (This hint only fires for an actual call, `name(...)` — a plain
+variable that happens to share a library function's name is just an
+ordinary variable, not a hint trigger.) `use` an unknown library name and
+you get a similar nudge:
+
+```
+$ s16c bad.s16c
+bad.s16c:1:5: no such library `graphics`; available: input, random, screen, time
+```
+
+**`use` order doesn't matter**, same as every other item — it can go at the
+top of the file (the convention above) or anywhere else. Repeating a `use`
+for a library you already imported is harmless, not an error.
+
+**Only what you reference gets compiled in**, even from a `use`d library.
+The library is ordinary s16c code; the compiler includes a function only if
+your program calls it (directly or transitively — calling `put_cell` pulls
+in the small helper it uses internally, for instance), so `use screen;`
+doesn't bloat your image with every screen function you didn't call.
+
+**Your own definitions always win.** Write your own `fn clear_screen()` and
+it replaces the library's everywhere, including inside other library
+functions that call it — one flat namespace, and the library just fills in
+the parts you haven't claimed (see COMPILER.md's
+[Standard Library Merge](../specs/COMPILER.md#standard-library-merge) if
+you want the exact rule).
+
+**No package manager.** These four libraries are the entire built-in
+catalog — there's no mechanism yet for pulling in a file, a URL, or a
+third-party crate-equivalent. If you need something the libraries don't
+offer, write it in your own program (or reach for
+[Advanced: talking to hardware directly](#advanced-talking-to-hardware-directly)).
+
+## Advanced: talking to hardware directly
+
+Everything in the standard library is built from six lower-level builtins —
+`peek`/`poke` (word) and `peek8`/`poke8` (byte), plus `halt`/`brk`. Reach
+for these when you need an address the library doesn't have a name for yet;
+`put_cell` itself is just a couple of multiplies and a `poke`.
 
 ```rust
 const FB: u16 = 0xF000;
@@ -250,22 +365,23 @@ fn main() {
 }
 ```
 
-Run this with `--tui` and `HI` appears at the top-left of the screen —
-same framebuffer format as the assembly-level examples in
-[writing-programs.md](writing-programs.md#talking-to-the-hardware), just
-addressed with ordinary function calls instead of hand-computed offsets.
+This draws the same way `put_cell` does, just spelling out the framebuffer
+address by hand instead of calling it — a good exercise once, and the
+pattern to reach for later if you outgrow what §
+[The standard library](#the-standard-library) offers.
 
-For a complete interactive program — reading `INPUT`, pacing on `TICK`,
-never halting — see [programs/walk.s16c](../programs/walk.s16c), the
-worked example from LANGUAGE.md §9:
+A practical note: nothing in s16c prints values for you to inspect —
+`poke`'d results live in memory, and the batch emulator's register dump
+(what you see without `--tui`) won't show them. The two real ways to check
+a value: poke it onto the framebuffer and watch with `--tui` (as above), or
+inspect memory directly from Rust the way the compiler's own test suite
+does (see
+[using-s16-core.md](using-s16-core.md#writing-tests-against-the-cpu)):
 
-```sh
-cargo run -p s16c -- programs/walk.s16c --bin
-cargo run -p s16-emulator -- --tui programs/walk.bin   # arrow keys move '@'
+```rust
+let image = s16_asm::assemble(&s16c::compile(source)?)?;
+// ...load into memory, cpu.run(...), then read mem[0x8000..0x8002]
 ```
-
-A `loop { }` that polls `INPUT` and redraws each tick *is* a game loop —
-that's the whole shape snake will use.
 
 ## Reading the generated assembly
 
@@ -282,7 +398,9 @@ didn't expect, reading the `.s16` is the fastest way to find out why.
 Codegen is intentionally simple rather than clever (COMPILER.md pins
 *behavior*, not code quality), so the output is usually easy to follow even
 without deep assembly experience: expressions evaluate through `R12`/`R13`,
-locals live at `[R15-2]`, `[R15-4]`, ... and so on.
+locals live at `[R15-2]`, `[R15-4]`, ... and so on. Calling a standard
+library function like `put_cell` looks exactly like calling one of your
+own — because to the compiler, it is one.
 
 You can also assemble and run that `.s16` file exactly like any hand-written
 program from [writing-programs.md](writing-programs.md) — it's ordinary S16
@@ -296,10 +414,11 @@ early on:
 
 - **`unknown variable` / `unknown function` / `unknown name`** — typo, or
   using a name before its scope. Unlike items (`fn`/`static`/`const`),
-  which can appear in any order, locals must be declared with `let` before
+  which can appear in any order, locals must be declared with `var` before
   use.
 - **`` `f` expects N argument(s), got M ``** — arity is checked at every
-  call site, builtins included (`peek` takes exactly one address).
+  call site, builtins and library calls included (`put_cell` takes exactly
+  four arguments).
 - **`cannot assign to constant`** — `const` is compile-time only and holds
   no memory; only `static` is assignable.
 - **`comparisons are non-associative; parenthesize`** — `a < b < c` isn't
@@ -312,8 +431,12 @@ itself isn't part of the contract, but what gets rejected is.
 
 ## What's not here yet
 
-Structs, enums, pointers, strings, local arrays, `match`, closures — all
-explicitly deferred past v1 (LANGUAGE.md's closing section). If a program
-needs one of these, the workaround today is usually parallel arrays (as
+Structs, enums, pointers, strings, local arrays, `match`, closures, and
+user-authored or external libraries — all explicitly deferred past v1
+(LANGUAGE.md's closing section). `use` only names one of the four built-in
+libraries; there's no file-path or URL form. There are also no methods or
+dot syntax: the standard library is called as plain functions
+(`put_cell(x, y, ...)`, not `screen.put(x, y, ...)`). If a program needs a
+struct, the workaround today is usually parallel arrays (as
 `SCORES`/`TOTAL` above) or plain integers standing in for an enum. That's
 enough for Snake and Pong, which is the whole design point.

@@ -8,7 +8,7 @@ things with it*.
 |-------|--------------|
 | [getting-started.md](getting-started.md) | Build the toolchain, assemble and run your first program, read the output |
 | [writing-programs.md](writing-programs.md) | Write S16 assembly: loops, branches, data, subroutines |
-| [writing-s16c.md](writing-s16c.md) | Write games in s16c: types, control flow, functions, arrays, MMIO |
+| [writing-s16c.md](writing-s16c.md) | Write games in s16c: the standard library (screen/input/time), types, control flow, functions |
 | [debugging.md](debugging.md) | Use BRK as a breakpoint, decode faults, diagnose the classic mistakes |
 | [using-s16-core.md](using-s16-core.md) | Embed the CPU in your own Rust code and drive it step by step |
 

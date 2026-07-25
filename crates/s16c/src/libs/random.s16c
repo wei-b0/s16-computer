@@ -1,0 +1,12 @@
+// The `random` library (specs/LANGUAGE.md §7.3): pseudorandom numbers.
+// `use random;` for food placement, spawn points, etc.
+
+static RAND_STATE: u16 = 1;
+
+// A value in 0..max (0 if max is 0). Mixes a local generator with the RNG
+// device so repeated calls within one tick still differ.
+fn random(max: u16) -> u16 {
+    RAND_STATE = RAND_STATE * 25173 + 13849 + peek(0xFF02);
+    if max == 0 { return 0; }
+    return RAND_STATE % max;
+}

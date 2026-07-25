@@ -4,6 +4,7 @@
 mod ast;
 mod check;
 mod codegen;
+mod imports;
 mod lexer;
 mod parser;
 
@@ -37,10 +38,13 @@ pub struct Pos {
     pub col: usize,
 }
 
-/// Compile s16c source to S16 assembly text.
+/// Compile s16c source to S16 assembly text. Standard-library functions are
+/// only visible if the program `use`s their library (LANGUAGE.md §7); a
+/// program's own definitions shadow a used library's of the same name.
 pub fn compile(source: &str) -> Result<String, CompileError> {
     let tokens = lexer::lex(source)?;
-    let items = parser::parse(&tokens)?;
+    let user_items = parser::parse(&tokens)?;
+    let items = imports::resolve(user_items)?;
     let program = check::check(&items)?;
     Ok(codegen::generate(&program))
 }

@@ -29,8 +29,8 @@ fn v1_loops_and_arithmetic() {
     let (cpu, mem) = run(
         r#"
 fn sum_to(n: u16) -> u16 {
-    let total: u16 = 0;
-    let i: u16 = 1;
+    var total: u16 = 0;
+    var i: u16 = 1;
     while i <= n { total = total + i; i = i + 1; }
     return total;
 }
@@ -65,9 +65,9 @@ static A: [u16; 5] = [10, 20, 30, 40, 50];
 static ACC: u16 = 0;
 
 fn main() {
-    let i: u16 = 0;
+    var i: u16 = 0;
     while i < 5 { ACC = ACC + A[i]; i = i + 1; }
-    let d: i16 = -3;
+    var d: i16 = -3;
     if d < 0 { ACC = ACC + 1; }
     poke(0x8000, ACC);
     halt();

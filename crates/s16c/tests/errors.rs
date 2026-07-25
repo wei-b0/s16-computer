@@ -10,16 +10,16 @@ fn error_classes_are_rejected() {
     // (source, line where the error is, message fragment)
     let cases: &[(&str, usize, &str)] = &[
         // syntax
-        ("fn main() { let x = ; }", 1, "expected an expression"),
+        ("fn main() { var x = ; }", 1, "expected an expression"),
         ("fn main() { if true return; }", 1, "expected `{`"),
         ("fn main() {", 1, "unclosed block"),
         // name
         ("fn main() { x = 1; }", 1, "unknown variable"),
-        ("fn main() { let a: u16 = y; }", 1, "unknown name"),
+        ("fn main() { var a: u16 = y; }", 1, "unknown name"),
         ("fn main() { f(); }", 1, "unknown function"),
         ("fn main() { }\nfn main() { }", 2, "already defined"),
         // type
-        ("fn main() { let a: u16 = 1; let b: i16 = 2; let c: u16 = a + b; }", 1, "found `i16`"),
+        ("fn main() { var a: u16 = 1; var b: i16 = 2; var c: u16 = a + b; }", 1, "found `i16`"),
         ("fn main() { if 1 { } }", 1, "expected `bool`"),
         ("fn f(a: u16) { }\nfn main() { f(true); }", 2, "expected `u16`"),
         ("fn f(a: u16) { }\nfn main() { f(1, 2); }", 2, "expects 1 argument"),
@@ -27,21 +27,21 @@ fn error_classes_are_rejected() {
         ("fn main() { return 1; }", 1, "returns no value"),
         ("fn f() -> u16 { return; }\nfn main() { }", 1, "expected `return` with"),
         // signedness (D018)
-        ("fn main() { let a: i16 = -6; let b: i16 = a / 2; }", 1, "`u16`-only"),
-        ("fn main() { let a: u16 = 5; let b: i16 = -a; }", 1, "expected `i16`"),
+        ("fn main() { var a: i16 = -6; var b: i16 = a / 2; }", 1, "`u16`-only"),
+        ("fn main() { var a: u16 = 5; var b: i16 = -a; }", 1, "expected `i16`"),
         // const
         ("fn g() -> u16 { return 1; }\nstatic X: u16 = g();\nfn main() { }", 2, "not a constant"),
         ("static A: [u16; 0] = [0; 0];\nfn main() { }", 1, "nonzero"),
-        ("fn main() { let x: u16 = 70000; }", 1, "out of range"),
+        ("fn main() { var x: u16 = 70000; }", 1, "out of range"),
         // structure
         ("fn not_main() { }", 1, "missing `fn main()`"),
         ("fn main(a: u16) { }", 1, "must take no parameters"),
         ("fn main() { break; }", 1, "outside of a loop"),
         ("fn f() -> u16 { if true { return 1; } }\nfn main() { }", 1, "without returning"),
         // arrays
-        ("static A: [u16; 2] = [1, 2];\nfn main() { let x: u16 = A; }", 2, "needs an index"),
+        ("static A: [u16; 2] = [1, 2];\nfn main() { var x: u16 = A; }", 2, "needs an index"),
         ("static A: [u16; 2] = [1, 2, 3];\nfn main() { }", 1, "3 initializer(s)"),
-        ("fn main() { let x: u16 = 1; let y: u16 = x[0]; }", 1, "not an array"),
+        ("fn main() { var x: u16 = 1; var y: u16 = x[0]; }", 1, "not an array"),
     ];
 
     for (src, line, needle) in cases {
@@ -53,7 +53,7 @@ fn error_classes_are_rejected() {
 
 #[test]
 fn positions_include_columns() {
-    let e = fails("fn main() { let a: u16 = true; }");
+    let e = fails("fn main() { var a: u16 = true; }");
     assert_eq!(e.line, 1);
     assert!(e.col > 20, "column should point into the initializer, got {}", e.col);
 }

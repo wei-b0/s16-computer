@@ -1,0 +1,41 @@
+// The `screen` library (specs/LANGUAGE.md §7.1): the 40x25 character
+// display. `use screen;` to draw.
+
+const SCREEN_W: u16 = 40;
+const SCREEN_H: u16 = 25;
+
+// Colors (framebuffer attribute values; bright ANSI palette).
+const BLACK: u16 = 0;
+const GRAY: u16 = 7;
+const RED: u16 = 9;
+const GREEN: u16 = 10;
+const YELLOW: u16 = 11;
+const BLUE: u16 = 12;
+const MAGENTA: u16 = 13;
+const CYAN: u16 = 14;
+const WHITE: u16 = 15;
+
+fn cell_addr(x: u16, y: u16) -> u16 {
+    return 0xF000 + (y * SCREEN_W + x) * 2;
+}
+
+fn put_cell(x: u16, y: u16, glyph: u16, color: u16) {
+    poke(cell_addr(x, y), (color << 8) | glyph);
+}
+
+// The glyph currently at (x, y) — read the screen back for collision checks.
+fn get_cell(x: u16, y: u16) -> u16 {
+    return peek(cell_addr(x, y)) & 0x00FF;
+}
+
+fn clear_screen() {
+    var y: u16 = 0;
+    while y < SCREEN_H {
+        var x: u16 = 0;
+        while x < SCREEN_W {
+            put_cell(x, y, ' ', BLACK);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}

@@ -143,6 +143,7 @@ pub fn check(items: &[Item]) -> Result<Program, CompileError> {
                 let params = f.params.iter().map(|(_, ty, _)| *ty).collect();
                 globals.fns.insert(f.name.clone(), (params, f.ret));
             }
+            Item::Use(_) => unreachable!("imports::resolve strips Use items before check()"),
         }
     }
 

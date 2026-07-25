@@ -22,7 +22,7 @@ fn r16(mem: &[u8; MEMORY_SIZE], addr: u16) -> u16 {
 #[test]
 fn wrapping_arithmetic() {
     let (_, mem) = run(
-        "fn main() { let x: u16 = 0xFFFF; poke(0x8000, x + 3); poke(0x8002, 0 - 1 + 0); halt(); }",
+        "fn main() { var x: u16 = 0xFFFF; poke(0x8000, x + 3); poke(0x8002, 0 - 1 + 0); halt(); }",
     );
     assert_eq!(r16(&mem, 0x8000), 2);
     assert_eq!(r16(&mem, 0x8002), 0xFFFF);
@@ -35,9 +35,9 @@ fn short_circuit_skips_side_effects() {
 static HITS: u16 = 0;
 fn touch() -> bool { HITS = HITS + 1; return true; }
 fn main() {
-    let a: bool = false && touch();   // rhs must not run
-    let b: bool = true || touch();    // rhs must not run
-    let c: bool = true && touch();    // rhs runs once
+    var a: bool = false && touch();   // rhs must not run
+    var b: bool = true || touch();    // rhs must not run
+    var c: bool = true && touch();    // rhs runs once
     if a == b { }
     if c { }
     poke(0x8000, HITS);
@@ -53,9 +53,9 @@ fn shadowing_and_scopes() {
     let (_, mem) = run(
         r#"
 fn main() {
-    let x: u16 = 1;
+    var x: u16 = 1;
     if true {
-        let x: u16 = 2;
+        var x: u16 = 2;
         poke(0x8000, x);
     }
     poke(0x8002, x);
@@ -72,13 +72,13 @@ fn casts_and_signedness() {
     let (_, mem) = run(
         r#"
 fn main() {
-    let a: u16 = 0xFFFF;
-    let b: i16 = a as i16;            // reinterpret: -1
+    var a: u16 = 0xFFFF;
+    var b: i16 = a as i16;            // reinterpret: -1
     if b < 0 { poke(0x8000, 1); }     // signed compare: taken
     if a > 0 { poke(0x8002, 1); }     // unsigned compare: taken
-    let c: u16 = 0x8000;
+    var c: u16 = 0x8000;
     poke(0x8004, c >> 1);             // logical: 0x4000
-    let d: i16 = c as i16;
+    var d: i16 = c as i16;
     poke(0x8006, (d >> 1) as u16);    // arithmetic: 0xC000
     halt();
 }
@@ -95,11 +95,11 @@ fn unary_ops() {
     let (_, mem) = run(
         r#"
 fn main() {
-    let x: i16 = 5;
+    var x: i16 = 5;
     poke(0x8000, (-x) as u16);        // 0xFFFB
-    let m: u16 = 0x00F0;
+    var m: u16 = 0x00F0;
     poke(0x8002, !m);                 // bitwise: 0xFF0F
-    let t: bool = true;
+    var t: bool = true;
     if !t { } else { poke(0x8004, 1); }
     halt();
 }
@@ -144,8 +144,8 @@ fn loop_break_continue() {
     let (_, mem) = run(
         r#"
 fn main() {
-    let sum: u16 = 0;
-    let i: u16 = 0;
+    var sum: u16 = 0;
+    var i: u16 = 0;
     loop {
         i = i + 1;
         if i > 10 { break; }
@@ -167,7 +167,7 @@ fn div_mod_and_consts() {
 const BASE: u16 = 0x8000;
 const SEVEN: u16 = 3 + 4;
 fn main() {
-    let n: u16 = 100;
+    var n: u16 = 100;
     poke(BASE, n / SEVEN);        // 14
     poke(BASE + 2, n % SEVEN);    // 2
     halt();
@@ -184,8 +184,8 @@ fn i16_array_and_negative_values() {
         r#"
 static D: [i16; 3] = [-1, 0, 1];
 fn main() {
-    let count: u16 = 0;
-    let i: u16 = 0;
+    var count: u16 = 0;
+    var i: u16 = 0;
     while i < 3 {
         if D[i] < 0 { count = count + 1; }
         i = i + 1;

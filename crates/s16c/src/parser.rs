@@ -86,8 +86,16 @@ impl<'a> Parser<'a> {
             Some(Tok::Fn) => self.function().map(Item::Fn),
             Some(Tok::Static) => self.static_item().map(Item::Static),
             Some(Tok::Const) => self.const_item().map(Item::Const),
-            _ => Err(self.err("expected `fn`, `static`, or `const`".into())),
+            Some(Tok::Use) => self.use_item().map(Item::Use),
+            _ => Err(self.err("expected `fn`, `static`, `const`, or `use`".into())),
         }
+    }
+
+    fn use_item(&mut self) -> Result<UseItem, CompileError> {
+        self.expect(Tok::Use, "`use`")?;
+        let (name, pos) = self.ident("library name")?;
+        self.expect(Tok::Semi, "`;` after `use`")?;
+        Ok(UseItem { name, pos })
     }
 
     fn function(&mut self) -> Result<FnItem, CompileError> {
@@ -183,13 +191,13 @@ impl<'a> Parser<'a> {
     fn stmt(&mut self) -> Result<Stmt, CompileError> {
         let pos = self.pos();
         match self.peek() {
-            Some(Tok::Let) => {
+            Some(Tok::Var) => {
                 self.next();
                 let (name, _) = self.ident("variable name")?;
                 let ty = if self.eat(&Tok::Colon) { Some(self.scalar()?) } else { None };
-                self.expect(Tok::Assign, "`=` in `let` (variables must be initialized)")?;
+                self.expect(Tok::Assign, "`=` in `var` (variables must be initialized)")?;
                 let value = self.expr()?;
-                self.expect(Tok::Semi, "`;` after `let`")?;
+                self.expect(Tok::Semi, "`;` after `var`")?;
                 Ok(Stmt::Let { name, ty, value })
             }
             Some(Tok::If) => self.if_stmt(),
@@ -461,7 +469,7 @@ mod tests {
 
     #[test]
     fn comparisons_are_non_associative() {
-        let e = parse(&lex("fn f() { let x: bool = 1 < 2 < 3; }").unwrap()).unwrap_err();
+        let e = parse(&lex("fn f() { var x: bool = 1 < 2 < 3; }").unwrap()).unwrap_err();
         assert!(e.msg.contains("non-associative"), "{}", e.msg);
     }
 
@@ -481,6 +489,15 @@ mod tests {
         parse_ok("fn f() { x = 1; a[2] = 3; g(); }");
         let e = parse(&lex("fn f() { 1 + 2 = 3; }").unwrap()).unwrap_err();
         assert!(e.msg.contains("assignment target"), "{}", e.msg);
+    }
+
+    #[test]
+    fn use_items() {
+        let items = parse_ok("use screen;\nuse input;\nfn main() { }");
+        let Item::Use(u) = &items[0] else { panic!() };
+        assert_eq!(u.name, "screen");
+        let Item::Use(u) = &items[1] else { panic!() };
+        assert_eq!(u.name, "input");
     }
 
     #[test]

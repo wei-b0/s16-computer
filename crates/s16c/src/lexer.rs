@@ -8,9 +8,10 @@ pub enum Tok {
     Int(i64),
     // keywords
     Fn,
-    Let,
+    Var,
     Static,
     Const,
+    Use,
     If,
     Else,
     While,
@@ -262,9 +263,10 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
 fn keyword(word: &str) -> Option<Tok> {
     Some(match word {
         "fn" => Tok::Fn,
-        "let" => Tok::Let,
+        "var" => Tok::Var,
         "static" => Tok::Static,
         "const" => Tok::Const,
+        "use" => Tok::Use,
         "if" => Tok::If,
         "else" => Tok::Else,
         "while" => Tok::While,
@@ -293,9 +295,9 @@ mod tests {
     #[test]
     fn words_numbers_operators() {
         assert_eq!(
-            toks("let x: u16 = 0x2A + 'A';"),
+            toks("var x: u16 = 0x2A + 'A';"),
             vec![
-                Tok::Let,
+                Tok::Var,
                 Tok::Ident("x".into()),
                 Tok::Colon,
                 Tok::U16,
@@ -338,7 +340,7 @@ mod tests {
 
     #[test]
     fn bad_input_reports_position() {
-        let e = lex("let @").unwrap_err();
+        let e = lex("var @").unwrap_err();
         assert_eq!((e.line, e.col), (1, 5));
     }
 }

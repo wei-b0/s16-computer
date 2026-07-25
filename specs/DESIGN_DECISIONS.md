@@ -202,3 +202,60 @@ s16c permits `/` and `%` on u16 only; on i16 they are compile errors.
 
 Reason:
 The CPU divides unsigned (D004 kept the ALU minimal). Signed division needs a software routine — worth adding as a library function when something actually needs it, not as hidden magic codegen in v1.
+
+## D019: A Standard Library, Not Raw MMIO, as the Primary API
+
+Decision:
+Application code targets a platform API — `put_cell`, `read_input`, `wait_tick`, `random`, and friends (LANGUAGE.md §7) — not `peek`/`poke` on hardware addresses directly. s16c is a tiny game language with low-level hardware access available, not a low-level language that happens to support games.
+
+Reason:
+The language's grammar was always small; the developer-experience problem turned out to live one layer up. The first worked example (walk.s16c) required knowing the framebuffer base address, the cell stride, the attribute-byte layout, and the INPUT bitmask before writing a single line of game logic — correct systems programming, but the wrong default for "make Pong." `peek`/`poke` stay exactly as they are (D016) as the advanced escape hatch; they're just no longer the first thing a program reaches for.
+
+Consequences:
+
+- LANGUAGE.md §7 documents the library surface as part of the language, alongside the grammar
+- The worked example and snake sketch (§9, §10) are rewritten to use it
+- No language or ABI changes — this is purely an API-surface decision
+
+## D020: The Standard Library Is s16c, Merged by Reachability
+
+Decision:
+The standard library is ordinary s16c source (`crates/s16c/src/prelude.s16c`), compiled into every program. Only library items the program actually references (transitively) are included; a user definition with the same name shadows the library's entirely, for every caller.
+
+Reason:
+Writing the library in s16c itself (rather than baking it into the compiler as special-cased codegen) means it is tested, read, and extended exactly like application code — and proves the language is expressive enough to build its own standard library, not just consume one. Reachability-based inclusion keeps unused library code out of the 64 KB image; whole-namespace shadowing means "I don't like how `clear_screen` works" is just writing a function, not forking the compiler.
+
+Consequences:
+
+- COMPILER.md's pipeline gains a merge step between parse and typecheck
+- The merge must be deterministic (fixed inclusion order) — same source, same output, matching every other determinism guarantee in this project
+- A bug in the library surfaces as a compiler bug, not a user error — it never should reach an end user
+
+*(Superseded in part by D022: the library is no longer one file "compiled
+into every program" — it's four files, each visible only if `use`d. The
+reachability-based inclusion and shadowing rules described above are
+unchanged; only what feeds them changed, from "everything" to "everything
+the program `use`d.")*
+
+## D021: `var`, Not `let`, for Mutable Locals
+
+Decision:
+Local variables are declared with `var`, not `let`.
+
+Reason:
+s16c locals are always mutable — there is no immutable binding and therefore no `mut` to distinguish (D014's word-sized-types simplicity extends here). Keeping Rust's `let` would silently promise Rust's default-immutable semantics to anyone who knows Rust; `var` is unambiguous on sight and matches what the language actually does, at the cost of one point of surface divergence from Rust.
+
+## D022: Explicit `use` Imports Replace the Auto-Merged Prelude
+
+Decision:
+The standard library splits into four named libraries — `screen`, `input`, `time`, `random` — and a program must write `use screen;` (etc.) before any of that library's functions, statics, or constants become visible. Nothing is available by default beyond the six always-on hardware builtins (D016).
+
+Reason:
+D020's single auto-merged prelude made every program's dependencies invisible in its own source — nothing said "this program touches the screen," the compiler just noticed and included it. That's a step too implicit, closer to Rust's automatic prelude than to the explicit, opt-in model of C's `#include` this project wants: a reader (or the compiler, when a name is unresolved) should be able to tell exactly what a program depends on by looking at its top few lines.
+
+Consequences:
+
+- D020's reachability + shadowing *mechanism* is unchanged, just re-scoped: it now runs over the union of `use`d libraries instead of one fixed file (see D020's note)
+- Every non-trivial program now opens with a handful of `use` lines — a small, permanent bit of ceremony traded for visible dependencies
+- A call to a real library function whose library wasn't `use`d gets a specific "add `use X;`" diagnostic rather than a bare unknown-name error, so the fix is discoverable without consulting the library reference
+- Still no package manager: the four libraries are a fixed, compiler-shipped set; `use` names a library, not a file path

@@ -1,0 +1,15 @@
+// The `input` library (specs/LANGUAGE.md §7.2): the keyboard/gamepad.
+// `use input;` to read it.
+
+fn read_input() -> u16 {
+    return peek(0xFF00);
+}
+
+fn key_up(keys: u16) -> bool { return keys & 1 != 0; }
+fn key_down(keys: u16) -> bool { return keys & 2 != 0; }
+fn key_left(keys: u16) -> bool { return keys & 4 != 0; }
+fn key_right(keys: u16) -> bool { return keys & 8 != 0; }
+fn key_a(keys: u16) -> bool { return keys & 16 != 0; }
+fn key_b(keys: u16) -> bool { return keys & 32 != 0; }
+fn key_start(keys: u16) -> bool { return keys & 64 != 0; }
+fn key_select(keys: u16) -> bool { return keys & 128 != 0; }
