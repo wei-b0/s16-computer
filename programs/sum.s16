@@ -1,0 +1,17 @@
+; sum.s16 — R0 = sum of the 5 words at data
+; The worked example from specs/ASSEMBLY.md; doubles as a toolchain smoke test.
+        .org 0x0000
+
+start:  LDI  R1, #data      ; R1 = pointer to list
+        LDI  R2, #5         ; R2 = count
+        LDI  R0, #0         ; R0 = running sum
+loop:   CMPI R2, #0
+        BEQ  done
+        LDW  R3, [R1]
+        ADD  R0, R0, R3
+        ADDI R1, R1, #2     ; next word
+        SUBI R2, R2, #1
+        JMP  loop
+done:   HALT
+
+data:   .word 10, 20, 30, 40, 50

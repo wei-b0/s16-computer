@@ -1,0 +1,9 @@
+[package]
+name = "s16-asm"
+description = "Assembler for the S16 assembly language defined in specs/ASSEMBLY.md."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+s16-core = { path = "../s16-core" }

@@ -1,0 +1,33 @@
+; calls.s16 — R0 = sum of squares of the list at data: 1+4+9+16 = 30.
+; Teaches: CALL/RET, PUSH/POP, nested calls, the calling convention
+; (args in R0-R3, result in R0, preserve what you borrow).
+
+        LDI  R1, #data
+        LDI  R2, #4          ; count
+        CALL sum_squares
+        HALT                 ; R0 = 30 (0x001E)
+
+; sum_squares(R1 = ptr, R2 = count) -> R0. Clobbers R1, R2.
+; Borrows R4 as the accumulator, so it preserves the caller's R4 on the stack.
+sum_squares:
+        PUSH R4
+        LDI  R4, #0
+ss_loop:
+        CMPI R2, #0
+        BEQ  ss_done
+        LDW  R0, [R1]
+        CALL square          ; nested call: two return addresses on the stack
+        ADD  R4, R4, R0
+        ADDI R1, R1, #2
+        SUBI R2, R2, #1
+        JMP  ss_loop
+ss_done:
+        MOV  R0, R4
+        POP  R4              ; restore before returning
+        RET
+
+; square(R0) -> R0
+square: MUL  R0, R0, R0
+        RET
+
+data:   .word 1, 2, 3, 4

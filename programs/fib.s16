@@ -1,0 +1,17 @@
+; fib.s16 — R0 = fib(N), iteratively. fib(0)=0, fib(1)=1, fib(10)=55.
+; Teaches: loops, multiple registers, CMP-then-branch.
+
+        LDI  R1, #10        ; N
+        LDI  R0, #0         ; fib(0)
+        LDI  R2, #1         ; fib(1)
+
+; each iteration: (R0, R2) <- (R2, R0 + R2), N times
+loop:   CMPI R1, #0
+        BEQ  done
+        ADD  R3, R0, R2     ; next term
+        MOV  R0, R2
+        MOV  R2, R3
+        SUBI R1, R1, #1
+        JMP  loop
+
+done:   HALT                ; R0 = 55 (0x0037)

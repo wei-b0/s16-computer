@@ -1,0 +1,26 @@
+; hello.s16 — write "HELLO, S16!" into the framebuffer.
+; Teaches: MMIO — devices are just memory (specs/MEMORY_MAP.md).
+;
+; The display is a 40x25 grid at 0xF000, 2 bytes per cell:
+;   byte 0 = character, byte 1 = attribute -> one aligned STW per cell.
+; The emulator doesn't render the framebuffer yet, so this program reads a
+; cell back into R0 to prove the writes landed.
+
+        LDI  R1, #text       ; source string (zero-terminated)
+        LDI  R2, #0xF000     ; destination: cell (0,0), top-left
+        LDI  R3, #0x0F00     ; attribute 0x0F in the high (attribute) byte
+
+loop:   LDB  R4, [R1]        ; next character, zero-extended
+        CMPI R4, #0
+        BEQ  done            ; hit the terminator
+        OR   R5, R4, R3      ; cell word = attribute<<8 | character
+        STW  [R2], R5        ; write the whole cell at once
+        ADDI R1, R1, #1
+        ADDI R2, R2, #2      ; next cell
+        JMP  loop
+
+done:   LDI  R1, #0xF000
+        LDW  R0, [R1]        ; read back cell (0,0): 0x0F48 = attr 0x0F, 'H'
+        HALT
+
+text:   .asciiz "HELLO, S16!"

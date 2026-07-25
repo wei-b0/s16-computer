@@ -1,0 +1,9 @@
+[package]
+name = "s16-emulator"
+description = "Local S16 emulator: loads memory images, runs s16-core, renders the framebuffer, and feeds input."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+s16-core = { path = "../s16-core" }

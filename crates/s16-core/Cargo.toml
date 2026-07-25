@@ -1,0 +1,8 @@
+[package]
+name = "s16-core"
+description = "The S16 CPU: state, decode, execution, memory, faults. Deterministic and dependency-free so it runs identically in the emulator and the Solana program."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
