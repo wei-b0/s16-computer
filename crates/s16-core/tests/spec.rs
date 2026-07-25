@@ -225,6 +225,33 @@ fn push_pop_call_ret() {
 }
 
 #[test]
+fn rsp_wsp_build_a_stack_frame() {
+    let (cpu, _) = run(&[
+        r(RSP, 1, 0, 0),      // R1 = SP = 0xF000
+        i(SUBI, 2, 1, 8),     // reserve 8 bytes: R2 = 0xEFF8
+        r(WSP, 0, 2, 0),      // SP = R2
+        i(LDI, 5, 0, 0xBEEF),
+        i(STW, 5, 2, 2),      // a "local" at [R2+2]
+        i(LDW, 6, 2, 2),
+        r(WSP, 0, 1, 0),      // restore SP
+        r(RSP, 7, 0, 0),
+        r(HALT, 0, 0, 0),
+    ]);
+    assert_eq!(cpu.state, State::Halted);
+    assert_eq!(cpu.regs[1], 0xF000, "RSP reads the reset SP");
+    assert_eq!(cpu.regs[6], 0xBEEF, "local written and read through the frame");
+    assert_eq!(cpu.regs[7], 0xF000, "WSP restored SP");
+    assert_eq!(cpu.sp, 0xF000);
+}
+
+#[test]
+fn wsp_faults_on_odd_address() {
+    let (cpu, _) = run(&[i(LDI, 1, 0, 0x1001), r(WSP, 0, 1, 0)]);
+    assert_eq!(cpu.state, State::Faulted(Fault::UnalignedAccess));
+    assert_eq!(cpu.sp, 0xF000, "SP untouched by the faulting WSP");
+}
+
+#[test]
 fn jr_jumps_absolute() {
     let (cpu, _) = run(&[
         i(LDI, 1, 0, 0x000C), // address of word 3

@@ -551,6 +551,14 @@ fn encode(
             need(1)?;
             r_type(op::POP, reg(0)?, 0, 0)
         }
+        "RSP" => {
+            need(1)?;
+            r_type(op::RSP, reg(0)?, 0, 0)
+        }
+        "WSP" => {
+            need(1)?;
+            r_type(op::WSP, 0, reg(0)?, 0)
+        }
         _ => return Err(format!("unknown mnemonic `{m}`")),
     };
     Ok(word)

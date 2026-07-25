@@ -136,3 +136,7 @@ mode (no `--tui`) devices stay silent and only the CPU runs.
 - Comment each routine's contract: inputs, outputs, what it clobbers.
 - Stuck? Drop a `BRK` where you want to look around —
   [debugging.md](debugging.md).
+
+Once loops, subroutines, and MMIO feel natural in assembly, most of that
+gets automated: [writing-s16c.md](writing-s16c.md) covers s16c, the small
+Rust-flavored language that compiles down to exactly this.

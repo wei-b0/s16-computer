@@ -16,6 +16,10 @@ S16 is a 16-bit computer implemented as a Solana program.
 | [MEMORY_MAP.md](MEMORY_MAP.md) | 64 KB layout, MMIO devices, framebuffer, reset state |
 | [CALLING_CONVENTION.md](CALLING_CONVENTION.md) | v1 software convention for calls and register use |
 | [ASSEMBLY.md](ASSEMBLY.md) | Assembly syntax, directives, worked encoding example |
+| [ASSEMBLER.md](ASSEMBLER.md) | The `s16-asm` contract: two-pass model, output format, CLI, error reporting |
+| [EMULATOR.md](EMULATOR.md) | The `s16-emulator` contract: batch mode, interactive `--tui` machine, rendering, input |
+| [LANGUAGE.md](LANGUAGE.md) | s16c — the tiny Rust-flavored game language: types, grammar, semantics, builtins |
+| [COMPILER.md](COMPILER.md) | The `s16c` compiler contract: pipeline, CLI, emitted-code rules, acceptance vectors |
 | [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) | The reasoning behind every architectural choice |
 
 ## CPU

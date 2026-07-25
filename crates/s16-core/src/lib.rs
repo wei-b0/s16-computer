@@ -76,6 +76,8 @@ pub mod opcode {
 
     pub const PUSH: u8 = 0x60;
     pub const POP: u8 = 0x61;
+    pub const RSP: u8 = 0x62;
+    pub const WSP: u8 = 0x63;
 }
 
 /// Fault codes (see INSTRUCTION_SET.md "Faults").
@@ -256,6 +258,14 @@ impl Cpu {
                 let value = load16(mem, self.sp)?;
                 self.sp = self.sp.wrapping_add(2);
                 self.regs[rd] = value;
+            }
+            RSP => self.regs[rd] = self.sp,
+            WSP => {
+                let target = self.regs[rs1];
+                if target & 1 != 0 {
+                    return Err(Fault::UnalignedAccess);
+                }
+                self.sp = target;
             }
 
             _ => return Err(Fault::IllegalOpcode),

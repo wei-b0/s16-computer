@@ -1,0 +1,13 @@
+[package]
+name = "s16c"
+description = "Compiler for s16c, the tiny Rust-flavored S16 language (specs/LANGUAGE.md), emitting S16 assembly per specs/COMPILER.md."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+s16-asm = { path = "../s16-asm" }
+
+[dev-dependencies]
+s16-core = { path = "../s16-core" }
+s16-machine = { path = "../s16-machine" }

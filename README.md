@@ -11,18 +11,22 @@ A 16-bit computer implemented as a Solana program — eventually running snake o
 | [crates/s16-machine](crates/s16-machine/) | The machine: tick loop + MMIO devices (input, RNG, tick) — `no_std`, host-agnostic |
 | [crates/s16-emulator](crates/s16-emulator/) | Local emulator: batch runs, or `--tui` for display + keyboard in the terminal |
 | [crates/s16-asm](crates/s16-asm/) | Assembler: `.s16` source → flat binary image |
-| [programs/](programs/) | Example S16 programs: `sum`, `fib`, `calls`, `hello`, `spin` — later snake |
+| [crates/s16c](crates/s16c/) | Compiler for [s16c](specs/LANGUAGE.md), the tiny Rust-flavored game language |
+| [programs/](programs/) | Example programs: assembly (`sum`, `fib`, `calls`, `hello`, `spin`) and s16c (`walk`) |
 | [docs/](docs/) | How-to guides: getting started, writing programs, debugging, embedding the CPU |
 
-Planned: `s16-program` (the Solana program), `snake` (game source in S16 assembly).
+Planned: `s16-program` (the Solana program), `snake` (in s16c).
 
 ## Building
 
 ```sh
 cargo build            # everything
-cargo test             # spec test vectors pin core, assembler, and machine to specs/
+cargo test             # spec test vectors pin core, assembler, machine, and compiler to specs/
 
-cargo run -p s16-asm -- programs/sum.s16            # assemble -> programs/sum.bin
-cargo run -p s16-emulator -- programs/sum.bin       # batch: run CPU, print registers
+cargo run -p s16-asm -- programs/sum.s16             # assemble -> programs/sum.bin
+cargo run -p s16-emulator -- programs/sum.bin        # batch: run CPU, print registers
 cargo run -p s16-emulator -- --tui programs/spin.bin # interactive machine (esc quits)
+
+cargo run -p s16c -- programs/walk.s16c --bin        # compile s16c -> programs/walk.bin
+cargo run -p s16-emulator -- --tui programs/walk.bin # play it (arrow keys move the @)
 ```

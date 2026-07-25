@@ -99,6 +99,13 @@ fn char_immediates_and_negative_offsets() {
 }
 
 #[test]
+fn rsp_wsp_encode() {
+    let image = assemble("RSP R3\nWSP R4\nHALT").unwrap();
+    assert_eq!(&image[..4], &[0x00, 0x00, 0x30, 0x62], "RSP rd in the rd field");
+    assert_eq!(&image[4..8], &[0x00, 0x00, 0x04, 0x63], "WSP rs in the rs1 field");
+}
+
+#[test]
 fn raw_numeric_branch_offset() {
     // "JMP #-1" = branch to self, same as a label on the line
     let by_number = assemble("JMP #-1").unwrap();

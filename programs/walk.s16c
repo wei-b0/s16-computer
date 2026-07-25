@@ -1,0 +1,41 @@
+// walk.s16c — arrow keys move '@' around the display.
+// The worked example from specs/LANGUAGE.md §9; the first s16c program.
+// Build and run:
+//   cargo run -p s16c -- programs/walk.s16c --bin
+//   cargo run -p s16-emulator -- --tui programs/walk.bin
+
+const INPUT: u16 = 0xFF00;
+const TICK:  u16 = 0xFF04;
+const FB:    u16 = 0xF000;
+const COLS:  u16 = 40;
+const ROWS:  u16 = 25;
+
+const KEY_UP:    u16 = 1;
+const KEY_DOWN:  u16 = 2;
+const KEY_LEFT:  u16 = 4;
+const KEY_RIGHT: u16 = 8;
+
+static X: u16 = 20;
+static Y: u16 = 12;
+
+fn cell(x: u16, y: u16) -> u16 {
+    return FB + (y * COLS + x) * 2;
+}
+
+fn wait_next_tick() {
+    let t: u16 = peek(TICK);
+    while peek(TICK) == t { }
+}
+
+fn main() {
+    loop {
+        let keys: u16 = peek(INPUT);
+        poke(cell(X, Y), ' ');                // erase old position
+        if keys & KEY_LEFT  != 0 && X > 0        { X = X - 1; }
+        if keys & KEY_RIGHT != 0 && X < COLS - 1 { X = X + 1; }
+        if keys & KEY_UP    != 0 && Y > 0        { Y = Y - 1; }
+        if keys & KEY_DOWN  != 0 && Y < ROWS - 1 { Y = Y + 1; }
+        poke(cell(X, Y), 0x0A00 | '@');       // green '@'
+        wait_next_tick();
+    }
+}

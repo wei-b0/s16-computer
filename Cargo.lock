@@ -237,6 +237,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "s16c"
+version = "0.1.0"
+dependencies = [
+ "s16-asm",
+ "s16-core",
+ "s16-machine",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

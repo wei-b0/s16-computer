@@ -143,8 +143,16 @@ The stack grows **downward**. Push pre-decrements; pop post-increments.
 |--------|----------|--------|-----------|
 | `0x60` | `PUSH rs1` | R (rd=0, rs2=0) | `SP -= 2; mem16[SP] = rs1` |
 | `0x61` | `POP rd` | R (rs1=0, rs2=0) | `rd = mem16[SP]; SP += 2` |
+| `0x62` | `RSP rd` | R (rs1=0, rs2=0) | `rd = SP` |
+| `0x63` | `WSP rs1` | R (rd=0, rs2=0) | `SP = rs1`. Faults if not 2-byte aligned. |
 
 SP arithmetic wraps mod 0x10000; v1 does not detect stack overflow/underflow.
+
+`RSP`/`WSP` (added in ISA v1.1) exist so software can build stack frames:
+without them SP is reachable only implicitly through PUSH/POP/CALL/RET, and a
+function could never address its stack locals. The compiler's prologue is
+`PUSH R15; RSP R15; RSP r; SUBI r,r,#locals; WSP r` — see
+[CALLING_CONVENTION.md](CALLING_CONVENTION.md).
 
 ## Faults
 
@@ -176,7 +184,7 @@ PC semantics on stopping: after `HALT`/`BRK`, PC points past the stopping instru
 0x30-0x37  alu immediate  ADDI SUBI ANDI ORI XORI SHLI SHRI SARI
 0x40-0x41  compare        CMP CMPI
 0x50-0x59  control flow   JMP JR BEQ BNE BLT BGE BLTU BGEU CALL RET
-0x60-0x61  stack          PUSH POP
+0x60-0x63  stack          PUSH POP RSP WSP
 ```
 
-43 instructions total. All other opcode values are illegal.
+45 instructions total. All other opcode values are illegal.
