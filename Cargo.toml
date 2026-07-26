@@ -6,6 +6,7 @@ members = [
     "crates/s16-emulator",
     "crates/s16-asm",
     "crates/s16c",
+    "crates/s16-wasm",
 ]
 
 [workspace.package]

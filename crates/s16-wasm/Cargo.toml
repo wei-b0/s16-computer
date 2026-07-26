@@ -1,0 +1,20 @@
+[package]
+name = "s16-wasm"
+description = "WASM bindings for s16/s16c: compile, assemble, and run S16 programs from a browser host."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+s16-core = { path = "../s16-core" }
+s16-machine = { path = "../s16-machine" }
+s16-asm = { path = "../s16-asm" }
+s16c = { path = "../s16c" }
+wasm-bindgen = "0.2"
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[features]
+default = ["console_error_panic_hook"]
