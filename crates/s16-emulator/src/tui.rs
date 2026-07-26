@@ -45,6 +45,9 @@ fn machine_loop(
     let mut machine = Machine::new(seed);
     let mut keys = Keys::default();
     let mut executed: u64 = 0;
+    #[allow(unused_assignments)]
+    let mut last_steps: u32 = 0;
+    let start = Instant::now();
 
     loop {
         let deadline = Instant::now() + FRAME;
@@ -73,8 +76,10 @@ fn machine_loop(
             }
         }
 
-        executed += machine.tick(mem, keys.mask(Instant::now()), budget) as u64;
-        draw(out, mem, &machine)?;
+        last_steps = machine.tick(mem, keys.mask(Instant::now()), budget);
+        executed += last_steps as u64;
+        let ips = executed as f64 / start.elapsed().as_secs_f64().max(f64::EPSILON);
+        draw(out, mem, &machine, last_steps, budget, ips)?;
     }
 }
 
@@ -130,12 +135,13 @@ fn printable(ch: u8) -> char {
     }
 }
 
-/// The one-line status bar: tick/state normally, or — when the program
-/// wrote something via `debug::print*` this tick (D025) — that text
-/// instead. No scrollback (a known v1 limitation, not a permanent one):
-/// the status line always shows "this tick's latest debug text," matching
-/// `Machine::debug_output()`'s replace-not-accumulate model.
-fn status_line(machine: &Machine) -> String {
+/// The one-line status bar: tick/state/steps-per-tick/IPS normally, or —
+/// when the program wrote something via `debug::print*` this tick (D025) —
+/// that text instead. No scrollback (a known v1 limitation, not a
+/// permanent one): the status line always shows "this tick's latest debug
+/// text," matching `Machine::debug_output()`'s replace-not-accumulate
+/// model.
+fn status_line(machine: &Machine, last_steps: u32, budget: u32, ips: f64) -> String {
     if !machine.debug_output().is_empty() {
         let text = String::from_utf8_lossy(machine.debug_output());
         let text = text.trim_end_matches('\n').replace('\n', " ");
@@ -144,14 +150,25 @@ fn status_line(machine: &Machine) -> String {
     }
     let state = match machine.cpu.state {
         State::Running => "running".to_string(),
+        State::Waiting => "waiting - press a key to resume".to_string(),
         State::Halted => "halted".to_string(),
         State::DebugHalt => "BRK - press r to resume".to_string(),
         State::Faulted(f) => format!("FAULT {} ({f:?}) at PC={:#06X}", f.code(), machine.cpu.pc),
     };
-    format!(" S16 | tick {:5} | {state} | esc quits ", machine.ticks)
+    format!(
+        " S16 | tick {:5} | {last_steps}/{budget} steps | {ips:.0} ips | {state} | esc quits ",
+        machine.ticks
+    )
 }
 
-fn draw(out: &mut io::Stdout, mem: &[u8; MEMORY_SIZE], machine: &Machine) -> io::Result<()> {
+fn draw(
+    out: &mut io::Stdout,
+    mem: &[u8; MEMORY_SIZE],
+    machine: &Machine,
+    last_steps: u32,
+    budget: u32,
+    ips: f64,
+) -> io::Result<()> {
     let mut current_attr: Option<u8> = None;
     for row in 0..mmio::FB_ROWS {
         queue!(out, MoveTo(0, row))?;
@@ -176,7 +193,7 @@ fn draw(out: &mut io::Stdout, mem: &[u8; MEMORY_SIZE], machine: &Machine) -> io:
         }
     }
 
-    let status = status_line(machine);
+    let status = status_line(machine, last_steps, budget, ips);
     queue!(
         out,
         SetAttribute(Attribute::Reset),
@@ -239,10 +256,25 @@ mod tests {
 
         let mut machine = Machine::new(1);
         machine.tick(&mut mem, 0, 100);
-        assert!(status_line(&machine).contains("debug: Hello!"), "{}", status_line(&machine));
+        let line = status_line(&machine, 0, 100, 0.0);
+        assert!(line.contains("debug: Hello!"), "{line}");
 
         // Next tick with no new writes: debug text goes away, tick/state text returns.
         machine.tick(&mut mem, 0, 100);
-        assert!(status_line(&machine).contains("tick"));
+        assert!(status_line(&machine, 0, 100, 0.0).contains("tick"));
+    }
+
+    #[test]
+    fn status_line_shows_waiting_state_and_steps() {
+        let mut mem = vec![0u8; MEMORY_SIZE];
+        mem[0..4].copy_from_slice(&[0x00, 0x00, 0x00, 0x03]); // WAIT (opcode 0x03)
+        let mut mem: Box<[u8; MEMORY_SIZE]> = mem.into_boxed_slice().try_into().unwrap();
+
+        let mut machine = Machine::new(1);
+        let steps = machine.tick(&mut mem, 0, 100);
+        let line = status_line(&machine, steps, 100, 42.0);
+        assert!(line.contains("waiting"), "{line}");
+        assert!(line.contains("1/100 steps"), "{line}");
+        assert!(line.contains("42 ips"), "{line}");
     }
 }

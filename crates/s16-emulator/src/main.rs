@@ -10,6 +10,7 @@ mod tui;
 use s16_core::{Cpu, State, MEMORY_SIZE};
 use std::io::IsTerminal;
 use std::process::ExitCode;
+use std::time::Instant;
 
 const MAX_STEPS: u64 = 100_000_000;
 const DEFAULT_SEED: u16 = 0xACE1;
@@ -129,6 +130,7 @@ fn run_tui(args: &Args, image: &[u8]) -> ExitCode {
                 "{} after {} ticks, {executed} instructions",
                 match machine.cpu.state {
                     State::Running => "interrupted while running",
+                    State::Waiting => "waiting for input",
                     State::Halted => "halted",
                     State::DebugHalt => "stopped at BRK",
                     State::Faulted(_) => "FAULTED",
@@ -151,11 +153,16 @@ fn run_batch(image: &[u8]) -> ExitCode {
     let mem: &mut [u8; MEMORY_SIZE] = (&mut mem[..]).try_into().unwrap();
 
     let mut cpu = Cpu::new();
+    let start = Instant::now();
     let steps = cpu.run(mem, MAX_STEPS);
+    let elapsed = start.elapsed();
 
     match cpu.state {
         State::Halted => println!("halted after {steps} instructions"),
         State::DebugHalt => println!("hit BRK after {steps} instructions"),
+        State::Waiting => {
+            println!("waiting for input after {steps} instructions (nothing will wake it in batch mode)")
+        }
         State::Faulted(fault) => println!(
             "FAULT {} ({fault:?}) at PC={:#06X} after {steps} instructions",
             fault.code(),
@@ -163,6 +170,8 @@ fn run_batch(image: &[u8]) -> ExitCode {
         ),
         State::Running => println!("still running after {steps} instructions (step budget hit)"),
     }
+    let ips = steps as f64 / elapsed.as_secs_f64().max(f64::EPSILON);
+    println!("{steps} instructions in {:.3} ms (~{ips:.0} IPS)", elapsed.as_secs_f64() * 1000.0);
     print_debug_output(mem);
     print_registers(&cpu);
 

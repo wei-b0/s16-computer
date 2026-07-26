@@ -12,8 +12,9 @@ static X: u16 = 20;
 static Y: u16 = 12;
 
 fn main() {
+    screen::put(X, Y, '@', screen::GREEN);                // draw the start position
     loop {
-        var keys: u16 = input::read();
+        var keys: u16 = input::wait_key();                // park until a key is held
         screen::put(X, Y, ' ', screen::BLACK);            // erase old position
         if input::key_left(keys)  && X > 0                    { X = X - 1; }
         if input::key_right(keys) && X < screen::SCREEN_W - 1  { X = X + 1; }

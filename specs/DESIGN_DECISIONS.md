@@ -302,9 +302,42 @@ Consequences:
 - The memory map's first CPU-writes/host-reads register — everything else on the page is the other way around
 - Host-agnostic by construction: the local emulator prints/shows it (batch: one-shot final read; `--tui`: the status bar, replacing tick/state text for the tick that produced it); a future Solana host could map the same bytes to program logs, or ignore them entirely, with no change to `debug.s16c` or the device itself
 - A single tick's (or, in batch mode, a whole run's) debug output is capped at 256 bytes — writes past capacity are silently dropped (`debug.s16c`'s `write_byte` checks `DEBUG_LEN` before writing), the same class of documented sharp edge as unchecked array indexing (LANGUAGE.md §6)
-- No scrollback in `--tui` mode in v1 — the status bar always shows only the most recent tick's debug text library calls are now module-qualified
+- No scrollback in `--tui` mode in v1 — the status bar always shows only the most recent tick's debug text
+
+*(Note, appended alongside D023: library calls are now module-qualified
 (`screen::put`, not bare `put`), so the shadowing behavior described above
 and in D020 no longer applies — a program's own names and a library's
 qualified names can't collide in the first place, so there's nothing left
 to shadow. `use` itself is unchanged: still required, still gates
-visibility exactly as described here.*
+visibility exactly as described here.)*
+
+## D026: WAIT / Waiting, Woken by Input
+
+Decision:
+A zero-operand `WAIT` instruction (opcode `0x03`) puts the CPU into a new `Waiting` state. Entering `Waiting` stops execution immediately — `Cpu::run()`'s loop already exits the instant `state != Running`, so no separate "budget" logic was needed to make this true. `Waiting` does not auto-resume at the next tick: `Machine::tick()` wakes it back to `Running` only when it observes a nonzero `INPUT` bitmask that tick (a keypress) — otherwise the CPU stays parked and the tick executes zero instructions. Batch mode never writes `INPUT` at all, so a `WAIT`ed program there simply never wakes; that is treated as the correct terminal outcome for a mode with no external event source, not a bug to work around.
+
+Reason:
+Before this, the only way for a program to be "idle" was to busy-loop, spending its full per-tick budget every tick even when genuinely waiting for a keypress — wasteful, and it made `Machine::tick()`'s existing "instructions actually executed" return value uninteresting (it was always either the budget or a HALT/fault point). `WAIT` gives a program an explicit way to say "nothing to do until something external happens," which both stops wasted execution immediately and mirrors the model the eventual on-chain host needs: a transaction that finds the CPU parked can skip execution entirely instead of paying gas for a busy-loop. Wake-on-`INPUT` (rather than auto-resuming every tick, or building a general interrupt controller) was chosen because `INPUT` is the only genuine external-event source the machine has today — inventing a fuller interrupt system ahead of any concrete need would be speculative.
+
+Consequences:
+
+- `status_word()` gains a fourth non-zero state value (`4`); STATUS's low byte is no longer just Running/Halted/DebugHalt/Faulted
+- The emulator's instructions-per-second figures (new in both batch mode and the `--tui` status bar) are the first place the emulator reports an actual execution rate rather than a raw instruction count — meaningful specifically because `Waiting` can now make that rate drop below `budget * tick_rate`
+- A `Waiting` CPU in `--tui` mode needs no dedicated resume key, unlike `DebugHalt`'s `r`: it wakes through the same key-press path that already produces the `INPUT` mask fed to `Machine::tick()` every frame
+- If a real interrupt/event system is ever added, it would extend the wake condition (more event sources waking a `Waiting` CPU), not replace this mechanism
+
+## D027: `wait()` and `input::wait_key()` — Exposing WAIT to s16c
+
+Decision:
+A raw `wait()` builtin (compiles straight to `WAIT`) joins `peek`/`poke`/`peek8`/`poke8`/`halt`/`brk` in LANGUAGE.md §7.6 — no `use` needed, one instruction, unlike `halt()` it *does* return once the host wakes the CPU. On top of it, `input::wait_key() -> u16` (`crates/s16c/src/libs/input.s16c`) is the ergonomic library wrapper: read the current keys, and if none are held, `wait()` then re-read, so it always returns a nonzero bitmask. The two are given distinct names (`wait` vs `wait_key`), not the same name at two tiers the way `screen::put`/raw-`poke` conceptually pair up.
+
+Reason:
+D026 put `WAIT` in the CPU and machine layer, but nothing in s16c could reach it — the project's running goal (D023) is for the standard library to read like a small subset of Rust, not to leave hardware capability behind a raw opcode wrapper only reachable by writing MMIO addresses by hand. `walk.s16c` is the concrete motivating case: it busy-spins every tick (via `time::wait_next()`'s tick-polling loop, which can't return until `TICK` itself changes, so it burns the rest of that tick's budget even when idle) whether or not a key is held; `input::wait_key()` lets it park instead.
+
+The distinct-name requirement is not a style preference — it's forced by how library qualification resolves bare names (D023, `imports.rs`'s `maybe_qualify`): a bare call inside a library's own body is checked against *that library first*. Had the wrapper also been named `wait`, the bare `wait()` call inside `input.s16c`'s own `wait_key()` body — meant to reach the raw CPU builtin — would instead have been qualified to `input::wait` (a self-reference), producing infinite recursion that's indistinguishable at the syntax level from genuine self-recursion.
+
+Consequences:
+
+- Any future library wrapper around a bare builtin must pick a distinct name from that builtin, for the same reason — this is now a standing rule, not a one-off
+- `walk.s16c` gained one new line (drawing the start position once before the loop) so the visible '@' still appears immediately with no input held, since `wait_key()` now parks at the top of the loop before that iteration's erase/redraw
+- `crates/s16c/tests/vectors.rs`'s `v4_devices_walk_program` now asserts `State::Waiting` (not `State::Running`) once no key is held — the loop legitimately parks between keypresses instead of eternally busy-spinning, the intended effect of this change, not a regression

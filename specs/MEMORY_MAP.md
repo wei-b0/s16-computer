@@ -71,7 +71,7 @@ All device registers are 16-bit and 2-byte aligned.
 | `0xFF00` | `INPUT` | R | Key state bitmask: bit 0 = Up, 1 = Down, 2 = Left, 3 = Right, 4 = A, 5 = B, 6 = Start, 7 = Select. 1 = held. Refreshed once per machine tick. |
 | `0xFF02` | `RNG` | R | 16-bit pseudorandom value, advanced **once per machine tick** (all reads within a tick see the same value). Generator: xorshift16 — `x ^= x<<7; x ^= x>>9; x ^= x<<8` — state never zero; seed chosen by the host at power-on (seed 0 is treated as 1). |
 | `0xFF04` | `TICK` | R | Machine tick counter: 0 on the first tick, +1 per tick, wraps mod 0x10000. |
-| `0xFF06` | `STATUS` | R | Execution status, written by the machine after each tick's CPU slice: low byte = state (0 Running, 1 Halted, 2 DebugHalt, 3 Faulted), high byte = fault code. |
+| `0xFF06` | `STATUS` | R | Execution status, written by the machine after each tick's CPU slice: low byte = state (0 Running, 1 Halted, 2 DebugHalt, 3 Faulted, 4 Waiting), high byte = fault code. |
 | `0xFF08–0xFFFF` | — | — | Reserved. Reads return 0; writes ignored. |
 
 ## Machine Tick
@@ -79,16 +79,22 @@ All device registers are 16-bit and 2-byte aligned.
 The machine runs the CPU in **ticks** (implemented by `s16-machine`). Each tick:
 
 1. The machine writes the device registers: `INPUT` (host-provided key state), `RNG` (advanced once), `TICK` (current count).
-2. The CPU executes up to a host-chosen **budget** of instructions (or until it stops).
-3. The machine reads `DEBUG_LEN`/`DEBUG_BUF`, exposes that tick's debug text to the host (replacing, not accumulating, whatever the previous tick exposed), and resets `DEBUG_LEN` to `0` so the program can keep appending next tick.
-4. The machine writes `STATUS` and increments the tick counter.
+2. If the CPU is **Waiting** (D026, `WAIT` instruction) and this tick's `INPUT` is nonzero, the machine wakes it back to Running — a keypress is the only external event the machine has today, so this is the entire wake rule. A `Waiting` CPU that isn't woken this way stays parked, executes nothing, and the tick returns `0` instructions executed.
+3. The CPU executes up to a host-chosen **budget** of instructions (or until it stops). Reaching `Halted`, `DebugHalt`, `Faulted`, or `Waiting` always stops execution before the budget is exhausted — the number of instructions actually executed this tick can be anywhere from `0` up to `budget`, and hosts should treat that number (not the budget) as the true cost/rate of the tick.
+4. The machine reads `DEBUG_LEN`/`DEBUG_BUF`, exposes that tick's debug text to the host (replacing, not accumulating, whatever the previous tick exposed), and resets `DEBUG_LEN` to `0` so the program can keep appending next tick.
+5. The machine writes `STATUS` and increments the tick counter.
 
 Hosts map ticks to their own time base — the emulator runs one tick per rendered frame; the Solana host runs one (or more) per transaction. Device registers keep updating after the CPU stops, so renderers stay live. Determinism rule: given the same seed, per-tick inputs, and budgets, every host produces the identical machine state.
+
+A `Waiting` CPU is specifically useful to a host like the eventual Solana one: a transaction that finds the CPU parked can skip execution entirely instead of paying for a busy-loop that spins until some input arrives.
 
 Batch mode (no ticking at all — see [EMULATOR.md](EMULATOR.md)) does not
 service any device this way; it gets one narrow exception, reading
 `DEBUG_LEN`/`DEBUG_BUF` a single time after the CPU stops, so a simple
-non-interactive program can still print a result.
+non-interactive program can still print a result. Since batch mode never
+writes `INPUT`, a `WAIT` there can never be woken — the CPU simply stays
+Waiting forever, which is the correct (if unexciting) outcome for a mode
+that has no external event source at all.
 
 How key events become the `INPUT` bitmask (keyboard in the emulator, transaction data on-chain) remains a host concern.
 

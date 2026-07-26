@@ -55,6 +55,15 @@ fn assembled_sum_runs_on_core() {
 }
 
 #[test]
+fn wait_assembles_and_stops_the_cpu() {
+    let image = assemble("LDI R1, #1\nWAIT\nLDI R2, #2\nHALT").unwrap();
+    assert_eq!(&image[4..8], &[0x00, 0x00, 0x00, 0x03], "WAIT encodes as opcode 0x03, all other fields zero");
+    let cpu = run(&image);
+    assert_eq!(cpu.state, State::Waiting);
+    assert_eq!(cpu.regs[2], 0, "the LDI after WAIT must not have run");
+}
+
+#[test]
 fn case_insensitive_and_whitespace_tolerant() {
     let upper = assemble("LDI R1, #7\nHALT").unwrap();
     let lower = assemble("  ldi   r1 , #7  ; comment\nhalt").unwrap();

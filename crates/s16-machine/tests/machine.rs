@@ -63,6 +63,34 @@ fn budget_bounds_each_tick() {
 }
 
 #[test]
+fn wait_stops_the_tick_before_the_budget_is_spent() {
+    let mut mem = load("LDI R1, #1\nWAIT\nLDI R2, #2\nHALT");
+    let mut machine = Machine::new(1);
+
+    let steps = machine.tick(&mut mem, 0, 1_000);
+    assert_eq!(steps, 2, "the tick stops right after WAIT, not at the budget");
+    assert_eq!(machine.cpu.state, State::Waiting);
+    assert_eq!(read16(&mem, mmio::STATUS), 4);
+}
+
+#[test]
+fn waiting_cpu_wakes_on_nonzero_input() {
+    let mut mem = load("WAIT\nLDI R1, #7\nHALT");
+    let mut machine = Machine::new(1);
+
+    assert_eq!(machine.tick(&mut mem, 0, 100), 1, "enters Waiting");
+    assert_eq!(machine.cpu.state, State::Waiting);
+
+    assert_eq!(machine.tick(&mut mem, 0, 100), 0, "input still zero: stays Waiting");
+    assert_eq!(machine.cpu.state, State::Waiting);
+
+    let steps = machine.tick(&mut mem, mmio::KEY_A, 100);
+    assert_eq!(machine.cpu.state, State::Halted, "a keypress wakes it and it runs to HALT");
+    assert!(steps > 0);
+    assert_eq!(machine.cpu.regs[1], 7);
+}
+
+#[test]
 fn status_reflects_state_and_fault() {
     let mut mem = load("LDI R1, #3\nLDI R2, #0\nDIV R3, R1, R2");
     let mut machine = Machine::new(1);

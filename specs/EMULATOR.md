@@ -48,19 +48,24 @@ Required output, in order:
 1. One status line naming why execution stopped:
    - `halted after N instructions` (`HALT`)
    - `hit BRK after N instructions` (`BRK`)
+   - `waiting for input after N instructions (nothing will wake it in batch
+     mode)` (`WAIT` — batch mode never writes `INPUT`, so this is terminal)
    - `FAULT <code> (<name>) at PC=0x____ after N instructions` (a fault —
      PC is the faulting instruction, per
      [INSTRUCTION_SET.md#execution-states](INSTRUCTION_SET.md#execution-states))
    - `still running after N instructions (step budget hit)` (likely an
      infinite loop)
-2. If the debug console buffer is non-empty: a `debug output:` line,
+2. An `N instructions in T ms (~R IPS)` line, timed around the run itself —
+   the first place the emulator reports an actual execution rate rather than
+   just an instruction count.
+3. If the debug console buffer is non-empty: a `debug output:` line,
    followed by its contents as text.
-3. `PC=0x____  SP=0x____  FLAGS=0b____`
-4. All 16 registers, `R0`–`R15`, hex, in reading order.
+4. `PC=0x____  SP=0x____  FLAGS=0b____`
+5. All 16 registers, `R0`–`R15`, hex, in reading order.
 
-**Exit code:** 0 for `Halted` or `DebugHalt`; 1 for `Faulted` or exhausting
-the step budget while still `Running`. Scripts and CI may rely on this to
-detect a program that didn't finish cleanly.
+**Exit code:** 0 for `Halted` or `DebugHalt`; 1 for `Faulted`, `Waiting`, or
+exhausting the step budget while still `Running`. Scripts and CI may rely on
+this to detect a program that didn't finish cleanly.
 
 ## Interactive Mode (`--tui`)
 
@@ -83,12 +88,18 @@ Every framebuffer cell (`0xF000` base, per
 - **Attribute byte:** bits 0–3 select the foreground color, bits 4–6 the
   background, bit 7 enables blink, mapped onto standard ANSI colors/attributes.
 
-A one-line status bar below the grid shows the tick count and current CPU
-state (`running`, `halted`, `BRK - press r to resume`, or the fault line from
+A one-line status bar below the grid shows the tick count, that tick's
+instructions-executed/budget, a running instructions-per-second figure
+(total instructions executed so far divided by wall-clock time since the
+session started), and the current CPU state (`running`, `waiting - press a
+key to resume`, `halted`, `BRK - press r to resume`, or the fault line from
 batch mode) — or, for any tick where the program wrote debug-console output
-(D025), that text in place of the tick/state text. There is no scrollback:
-the bar always shows the most recent tick's debug text, not a running log —
-a known v1 limitation.
+(D025), that text in place of everything else. There is no scrollback: the
+bar always shows the most recent tick's debug text, not a running log — a
+known v1 limitation. Because a `WAIT`ing CPU executes nothing until woken
+(D026), its steps-executed figure and its contribution to the running IPS
+both drop to `0` for as long as it stays parked — this is what makes IPS a
+meaningful number instead of a constant `budget * tick_rate`.
 
 ### Input
 
@@ -116,7 +127,10 @@ only require *some* bitmask of currently-considered-held keys each tick.
 
 `Esc` and `Ctrl+C` end the session immediately (not written to any register).
 `r` resumes execution when the CPU is in `DebugHalt` (i.e. stopped at `BRK`)
-by setting it back to `Running`; it has no effect otherwise.
+by setting it back to `Running`; it has no effect otherwise. A CPU in
+`Waiting` needs no dedicated key: it wakes on the same key presses that feed
+the `INPUT` bitmask (D026) — any mapped key (see the table above) wakes it
+on the next tick, no separate "resume" gesture required.
 
 ### Exit
 
@@ -125,8 +139,8 @@ restored to its prior state (raw mode off, alternate screen exited, cursor
 shown) before anything else is printed. Then, in the same format as batch
 mode:
 
-1. A status line reporting why the session ended
-   (`halted` / `stopped at BRK` / `FAULTED` / `interrupted while running`),
+1. A status line reporting why the session ended (`halted` / `stopped at
+   BRK` / `waiting for input` / `FAULTED` / `interrupted while running`),
    the tick count, and total instructions executed.
 2. The same register dump as batch mode.
 

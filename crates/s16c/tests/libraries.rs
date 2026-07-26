@@ -140,6 +140,20 @@ fn wait_next_blocks_for_exactly_one_tick() {
 }
 
 #[test]
+fn wait_key_blocks_until_a_key_is_pressed() {
+    let mut mem = build("use input;\nfn main() { poke(0x8000, input::wait_key()); halt(); }");
+    let mut machine = Machine::new(1);
+
+    machine.tick(&mut mem, 0, 1_000); // no key: parks inside wait_key()
+    assert_eq!(machine.cpu.state, State::Waiting);
+    assert_eq!(u16::from_le_bytes([mem[0x8000], mem[0x8001]]), 0, "not written yet");
+
+    machine.tick(&mut mem, mmio::KEY_A, 1_000); // wakes, re-reads, returns, halts
+    assert_eq!(machine.cpu.state, State::Halted);
+    assert_eq!(u16::from_le_bytes([mem[0x8000], mem[0x8001]]), mmio::KEY_A);
+}
+
+#[test]
 fn rng_next_stays_within_bound_and_varies() {
     let (cpu, mem) = run(
         r#"

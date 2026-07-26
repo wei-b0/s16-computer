@@ -13,3 +13,16 @@ fn key_a(keys: u16) -> bool { return keys & 16 != 0; }
 fn key_b(keys: u16) -> bool { return keys & 32 != 0; }
 fn key_start(keys: u16) -> bool { return keys & 64 != 0; }
 fn key_select(keys: u16) -> bool { return keys & 128 != 0; }
+
+// Block until a key is held, then return the bitmask — the blocking
+// counterpart to `read()`. Re-reads after waking rather than trusting the
+// pre-wait snapshot, since a key could in principle release again before
+// the caller acts on it.
+fn wait_key() -> u16 {
+    var keys: u16 = read();
+    if keys == 0 {
+        wait();
+        keys = read();
+    }
+    return keys;
+}

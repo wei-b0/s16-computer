@@ -53,6 +53,7 @@ Bits 4–15 are reserved and read as zero.
 | `0x00` | `NOP` | R (all fields 0) | Do nothing. |
 | `0x01` | `HALT` | R | CPU enters **Halted** state. Program has finished. |
 | `0x02` | `BRK` | R | CPU enters **DebugHalt** state. Emulators/debuggers stop here; on-chain, treated like HALT with a debug status. |
+| `0x03` | `WAIT` | R | CPU enters **Waiting** state: parked until the host wakes it (D026). Execution for the current tick/step budget stops immediately, without spending the rest of it. |
 
 ### Data Movement
 
@@ -169,16 +170,17 @@ Any fault moves the CPU to the **Faulted** state with a fault code; execution st
 | State | Entered by | Meaning |
 |-------|-----------|---------|
 | Running | reset | normal execution |
+| Waiting | `WAIT` | parked until the host observes an external event (D026); resumes to Running when woken |
 | Halted | `HALT` | program finished cleanly |
 | DebugHalt | `BRK` | stopped for a debugger; emulators may resume, on-chain it is terminal |
 | Faulted | any fault | stopped with a fault code |
 
-PC semantics on stopping: after `HALT`/`BRK`, PC points past the stopping instruction (so resuming from DebugHalt continues naturally). After a fault, PC still points at the faulting instruction, and none of that instruction's register, memory, or SP updates are visible.
+PC semantics on stopping: after `HALT`/`BRK`/`WAIT`, PC points past the stopping instruction (so resuming from DebugHalt, or waking from Waiting, continues naturally). After a fault, PC still points at the faulting instruction, and none of that instruction's register, memory, or SP updates are visible.
 
 ## Opcode Map Summary
 
 ```
-0x00-0x02  system         NOP HALT BRK
+0x00-0x03  system         NOP HALT BRK WAIT
 0x10-0x15  data movement  MOV LDI LDW LDB STW STB
 0x20-0x2B  alu register   ADD SUB MUL DIV MOD AND OR XOR NOT SHL SHR SAR
 0x30-0x37  alu immediate  ADDI SUBI ANDI ORI XORI SHLI SHRI SARI
@@ -187,4 +189,4 @@ PC semantics on stopping: after `HALT`/`BRK`, PC points past the stopping instru
 0x60-0x63  stack          PUSH POP RSP WSP
 ```
 
-45 instructions total. All other opcode values are illegal.
+46 instructions total. All other opcode values are illegal.

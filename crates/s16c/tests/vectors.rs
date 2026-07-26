@@ -88,11 +88,12 @@ fn v4_devices_walk_program() {
     let mut mem = build(&source);
     let mut machine = Machine::new(1);
 
-    // A generous per-tick budget: the program draws then polls TICK.
+    // A generous per-tick budget: the program draws then parks in wait_key().
     machine.tick(&mut mem, 0, 50_000);
     let at = |x: u16, y: u16| mmio::cell_addr(y, x) as usize;
     assert_eq!(mem[at(20, 12)], b'@', "drawn at the start position");
     assert_eq!(mem[at(20, 12) + 1], 0x0A, "green attribute");
+    assert_eq!(machine.cpu.state, State::Waiting, "parks with no key held (D026/D027)");
 
     // Hold Right for three ticks: the '@' walks right one cell per tick.
     for _ in 0..3 {
@@ -101,5 +102,5 @@ fn v4_devices_walk_program() {
     machine.tick(&mut mem, 0, 50_000);
     assert_eq!(mem[at(23, 12)], b'@', "moved right three cells");
     assert_eq!(mem[at(20, 12)], b' ', "old position erased");
-    assert_eq!(machine.cpu.state, State::Running, "game loop never halts");
+    assert_eq!(machine.cpu.state, State::Waiting, "parks again once the key is released");
 }

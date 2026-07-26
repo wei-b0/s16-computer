@@ -198,8 +198,9 @@ it needs with `use`, then calls its items by their full `module::name` path
 
 | Item | Effect |
 |------|--------|
-| `input::read() -> u16` | the current key bitmask |
+| `input::read() -> u16` | the current key bitmask (never blocks) |
 | `input::key_up/down/left/right/a/b/start/select(keys: u16) -> bool` | test one bit of a bitmask from `input::read()` |
+| `input::wait_key() -> u16` | block until a key is held, then return the bitmask (D027) |
 
 ### 7.3 `use time;`
 
@@ -266,6 +267,7 @@ They compile to a single instruction each and follow no calling convention:
 | `poke8(addr: u16, value: u16)` | byte store, low byte (`STB`) |
 | `halt()` | stop the CPU (`HALT`); never returns |
 | `brk()` | debug breakpoint (`BRK`) |
+| `wait()` | park the CPU (`WAIT`, D026); unlike `halt`, this *does* return — once the host wakes it |
 
 Devices are memory ([MEMORY_MAP.md](MEMORY_MAP.md)), so these are how the
 libraries themselves are written — `screen::put` is a couple of arithmetic

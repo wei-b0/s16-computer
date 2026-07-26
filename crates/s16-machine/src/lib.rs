@@ -115,17 +115,23 @@ impl Machine {
     ///
     /// 1. write `input` to INPUT, advance the RNG into RNG, write the tick
     ///    counter to TICK;
-    /// 2. execute up to `budget` instructions;
-    /// 3. drain DEBUG_BUF/DEBUG_LEN into `debug_output()` and reset
+    /// 2. if the CPU is Waiting and `input` is nonzero, wake it (D026) —
+    ///    a keypress is the only external event the machine has today;
+    /// 3. execute up to `budget` instructions;
+    /// 4. drain DEBUG_BUF/DEBUG_LEN into `debug_output()` and reset
     ///    DEBUG_LEN to 0; update STATUS and increment the tick counter.
     ///
     /// Returns the number of instructions executed (0 once the CPU has
-    /// stopped — device registers still update, so a renderer keeps working).
+    /// stopped or is Waiting — device registers still update, so a
+    /// renderer keeps working).
     pub fn tick(&mut self, mem: &mut [u8; MEMORY_SIZE], input: u16, budget: u32) -> u32 {
         write16(mem, mmio::INPUT, input);
         write16(mem, mmio::RNG, self.rng.advance());
         write16(mem, mmio::TICK, self.ticks);
 
+        if self.cpu.state == State::Waiting && input != 0 {
+            self.cpu.state = State::Running;
+        }
         let steps = self.cpu.run(mem, budget as u64) as u32;
 
         let len = (read16(mem, mmio::DEBUG_LEN) as usize).min(mmio::DEBUG_BUF_CAP);
@@ -147,6 +153,7 @@ pub fn status_word(state: State) -> u16 {
         State::Halted => 1,
         State::DebugHalt => 2,
         State::Faulted(f) => 3 | ((f.code() as u16) << 8),
+        State::Waiting => 4,
     }
 }
 

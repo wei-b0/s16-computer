@@ -257,8 +257,9 @@ there's no bare-name shortcut, even after `use`.
 
 | Call | Effect |
 |------|--------|
-| `input::read() -> u16` | the current key bitmask |
+| `input::read() -> u16` | the current key bitmask (never blocks) |
 | `input::key_up/down/left/right/a/b/start/select(keys) -> bool` | test one key from an `input::read()` bitmask |
+| `input::wait_key() -> u16` | block until a key is held, then return the bitmask |
 
 ### `use time;`
 
@@ -339,8 +340,9 @@ static X: u16 = 20;
 static Y: u16 = 12;
 
 fn main() {
+    screen::put(X, Y, '@', screen::GREEN);                    // draw the start position
     loop {
-        var keys: u16 = input::read();
+        var keys: u16 = input::wait_key();                    // park until a key is held
         screen::put(X, Y, ' ', screen::BLACK);                // erase old position
         if input::key_left(keys)  && X > 0                    { X = X - 1; }
         if input::key_right(keys) && X < screen::SCREEN_W - 1  { X = X + 1; }
@@ -352,9 +354,12 @@ fn main() {
 }
 ```
 
-This is [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) — a `loop { }` that
-reads input, redraws, and paces itself on `time::wait_next()` *is* a game
-loop, the same shape snake will use:
+This is [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) — a `loop { }`
+that blocks on `input::wait_key()`, redraws, and paces itself on
+`time::wait_next()` *is* a game loop, the same shape snake will use. Between
+keypresses the CPU is genuinely parked (`WAIT`, D026/D027) — not spinning —
+so idle frames barely register on the emulator's instructions-per-second
+figures:
 
 ```sh
 cargo run -p s16c -- programs/s16c/walk.s16c --bin
@@ -399,10 +404,11 @@ offer, write it in your own program (or reach for
 
 ## Advanced: talking to hardware directly
 
-Everything in the standard library is built from six lower-level builtins —
-`peek`/`poke` (word) and `peek8`/`poke8` (byte), plus `halt`/`brk`. Reach
-for these when you need an address the library doesn't have a name for yet;
-`screen::put` itself is just a couple of multiplies and a `poke`.
+Everything in the standard library is built from seven lower-level
+builtins — `peek`/`poke` (word) and `peek8`/`poke8` (byte), plus
+`halt`/`brk`/`wait`. Reach for these when you need an address the library
+doesn't have a name for yet; `screen::put` itself is just a couple of
+multiplies and a `poke`, and `input::wait_key()` is `read()` plus a `wait()`.
 
 ```rust
 const FB: u16 = 0xF000;

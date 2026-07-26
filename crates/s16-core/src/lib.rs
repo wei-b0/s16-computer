@@ -30,6 +30,7 @@ pub mod opcode {
     pub const NOP: u8 = 0x00;
     pub const HALT: u8 = 0x01;
     pub const BRK: u8 = 0x02;
+    pub const WAIT: u8 = 0x03;
 
     pub const MOV: u8 = 0x10;
     pub const LDI: u8 = 0x11;
@@ -98,6 +99,7 @@ impl Fault {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
     Running,
+    Waiting,
     Halted,
     DebugHalt,
     Faulted(Fault),
@@ -133,10 +135,10 @@ impl Cpu {
 
     /// Execute one instruction. Does nothing unless the state is Running.
     ///
-    /// After HALT/BRK, PC points past the stopping instruction (so a debugger
-    /// resuming from BRK continues naturally). After a fault, PC still points
-    /// at the faulting instruction and no partial register/memory/SP updates
-    /// from it are visible.
+    /// After HALT/BRK/WAIT, PC points past the stopping instruction (so a
+    /// debugger resuming from BRK, or a host waking a Waiting CPU, continues
+    /// naturally). After a fault, PC still points at the faulting instruction
+    /// and no partial register/memory/SP updates from it are visible.
     pub fn step(&mut self, mem: &mut [u8; MEMORY_SIZE]) {
         if self.state != State::Running {
             return;
@@ -175,6 +177,7 @@ impl Cpu {
             NOP => {}
             HALT => self.state = State::Halted,
             BRK => self.state = State::DebugHalt,
+            WAIT => self.state = State::Waiting,
 
             MOV => self.regs[rd] = self.regs[rs1],
             LDI => self.regs[rd] = imm,
