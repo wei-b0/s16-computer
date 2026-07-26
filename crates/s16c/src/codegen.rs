@@ -314,6 +314,7 @@ impl Gen {
             Builtin::Halt => self.emit("HALT"),
             Builtin::Brk => self.emit("BRK"),
             Builtin::Wait => self.emit("WAIT"),
+            Builtin::WaitTick => self.emit("WAITTICK"),
             Builtin::Peek | Builtin::Peek8 => {
                 self.expr(&args[0]);
                 let load = if b == Builtin::Peek { "LDW " } else { "LDB " };

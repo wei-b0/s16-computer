@@ -63,9 +63,9 @@ Required output, in order:
 4. `PC=0x____  SP=0x____  FLAGS=0b____`
 5. All 16 registers, `R0`–`R15`, hex, in reading order.
 
-**Exit code:** 0 for `Halted` or `DebugHalt`; 1 for `Faulted`, `Waiting`, or
-exhausting the step budget while still `Running`. Scripts and CI may rely on
-this to detect a program that didn't finish cleanly.
+**Exit code:** 0 for `Halted` or `DebugHalt`; 1 for `Faulted`, `Waiting`,
+`WaitingTick`, or exhausting the step budget while still `Running`. Scripts
+and CI may rely on this to detect a program that didn't finish cleanly.
 
 ## Interactive Mode (`--tui`)
 
@@ -92,14 +92,18 @@ A one-line status bar below the grid shows the tick count, that tick's
 instructions-executed/budget, a running instructions-per-second figure
 (total instructions executed so far divided by wall-clock time since the
 session started), and the current CPU state (`running`, `waiting - press a
-key to resume`, `halted`, `BRK - press r to resume`, or the fault line from
-batch mode) — or, for any tick where the program wrote debug-console output
-(D025), that text in place of everything else. There is no scrollback: the
-bar always shows the most recent tick's debug text, not a running log — a
-known v1 limitation. Because a `WAIT`ing CPU executes nothing until woken
-(D026), its steps-executed figure and its contribution to the running IPS
-both drop to `0` for as long as it stays parked — this is what makes IPS a
-meaningful number instead of a constant `budget * tick_rate`.
+key to resume`, `waiting for next tick`, `halted`, `BRK - press r to
+resume`, or the fault line from batch mode) — or, for any tick where the
+program wrote debug-console output (D025), that text in place of everything
+else. There is no scrollback: the bar always shows the most recent tick's
+debug text, not a running log — a known v1 limitation. Because a `WAIT`ing
+or `WAITTICK`ing CPU executes nothing until woken (D026, D028), its
+steps-executed figure and its contribution to the running IPS both drop to
+`0` for as long as it stays parked — this is what makes IPS a meaningful
+number instead of a constant `budget * tick_rate`. In particular, a game
+loop that paces itself with `time::wait_next()` (which compiles to
+`WAITTICK`) now reports its true per-frame instruction cost instead of
+always reading `budget/budget` — see D028.
 
 ### Input
 
@@ -130,7 +134,9 @@ only require *some* bitmask of currently-considered-held keys each tick.
 by setting it back to `Running`; it has no effect otherwise. A CPU in
 `Waiting` needs no dedicated key: it wakes on the same key presses that feed
 the `INPUT` bitmask (D026) — any mapped key (see the table above) wakes it
-on the next tick, no separate "resume" gesture required.
+on the next tick, no separate "resume" gesture required. A CPU in
+`WaitingTick` needs no key at all — it wakes automatically on the very next
+tick regardless of input (D028).
 
 ### Exit
 

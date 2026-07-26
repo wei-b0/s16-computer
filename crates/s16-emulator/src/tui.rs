@@ -151,6 +151,7 @@ fn status_line(machine: &Machine, last_steps: u32, budget: u32, ips: f64) -> Str
     let state = match machine.cpu.state {
         State::Running => "running".to_string(),
         State::Waiting => "waiting - press a key to resume".to_string(),
+        State::WaitingTick => "waiting for next tick".to_string(),
         State::Halted => "halted".to_string(),
         State::DebugHalt => "BRK - press r to resume".to_string(),
         State::Faulted(f) => format!("FAULT {} ({f:?}) at PC={:#06X}", f.code(), machine.cpu.pc),

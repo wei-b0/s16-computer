@@ -357,9 +357,9 @@ fn main() {
 This is [programs/s16c/walk.s16c](../programs/s16c/walk.s16c) — a `loop { }`
 that blocks on `input::wait_key()`, redraws, and paces itself on
 `time::wait_next()` *is* a game loop, the same shape snake will use. Between
-keypresses the CPU is genuinely parked (`WAIT`, D026/D027) — not spinning —
-so idle frames barely register on the emulator's instructions-per-second
-figures:
+keypresses the CPU is genuinely parked — `wait_key()` on `WAIT` (D026/D027),
+`wait_next()` on `WAITTICK` (D028) — not spinning, so idle frames barely
+register on the emulator's instructions-per-second figures:
 
 ```sh
 cargo run -p s16c -- programs/s16c/walk.s16c --bin
@@ -404,11 +404,12 @@ offer, write it in your own program (or reach for
 
 ## Advanced: talking to hardware directly
 
-Everything in the standard library is built from seven lower-level
+Everything in the standard library is built from eight lower-level
 builtins — `peek`/`poke` (word) and `peek8`/`poke8` (byte), plus
-`halt`/`brk`/`wait`. Reach for these when you need an address the library
-doesn't have a name for yet; `screen::put` itself is just a couple of
-multiplies and a `poke`, and `input::wait_key()` is `read()` plus a `wait()`.
+`halt`/`brk`/`wait`/`wait_tick`. Reach for these when you need an address the
+library doesn't have a name for yet; `screen::put` itself is just a couple of
+multiplies and a `poke`, `input::wait_key()` is `read()` plus a `wait()`, and
+`time::wait_next()` is just `wait_tick()`.
 
 ```rust
 const FB: u16 = 0xF000;

@@ -454,13 +454,14 @@ fn encode(
     };
 
     let word = match m {
-        "NOP" | "HALT" | "BRK" | "WAIT" | "RET" => {
+        "NOP" | "HALT" | "BRK" | "WAIT" | "WAITTICK" | "RET" => {
             need(0)?;
             let opc = match m {
                 "NOP" => op::NOP,
                 "HALT" => op::HALT,
                 "BRK" => op::BRK,
                 "WAIT" => op::WAIT,
+                "WAITTICK" => op::WAITTICK,
                 _ => op::RET,
             };
             r_type(opc, 0, 0, 0)

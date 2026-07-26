@@ -64,6 +64,19 @@ fn wait_assembles_and_stops_the_cpu() {
 }
 
 #[test]
+fn waittick_assembles_and_stops_the_cpu() {
+    let image = assemble("LDI R1, #1\nWAITTICK\nLDI R2, #2\nHALT").unwrap();
+    assert_eq!(
+        &image[4..8],
+        &[0x00, 0x00, 0x00, 0x04],
+        "WAITTICK encodes as opcode 0x04, all other fields zero"
+    );
+    let cpu = run(&image);
+    assert_eq!(cpu.state, State::WaitingTick);
+    assert_eq!(cpu.regs[2], 0, "the LDI after WAITTICK must not have run");
+}
+
+#[test]
 fn case_insensitive_and_whitespace_tolerant() {
     let upper = assemble("LDI R1, #7\nHALT").unwrap();
     let lower = assemble("  ldi   r1 , #7  ; comment\nhalt").unwrap();

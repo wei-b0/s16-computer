@@ -131,6 +131,7 @@ fn run_tui(args: &Args, image: &[u8]) -> ExitCode {
                 match machine.cpu.state {
                     State::Running => "interrupted while running",
                     State::Waiting => "waiting for input",
+                    State::WaitingTick => "waiting for next tick",
                     State::Halted => "halted",
                     State::DebugHalt => "stopped at BRK",
                     State::Faulted(_) => "FAULTED",
@@ -162,6 +163,9 @@ fn run_batch(image: &[u8]) -> ExitCode {
         State::DebugHalt => println!("hit BRK after {steps} instructions"),
         State::Waiting => {
             println!("waiting for input after {steps} instructions (nothing will wake it in batch mode)")
+        }
+        State::WaitingTick => {
+            println!("waiting for next tick after {steps} instructions (nothing will wake it in batch mode)")
         }
         State::Faulted(fault) => println!(
             "FAULT {} ({fault:?}) at PC={:#06X} after {steps} instructions",

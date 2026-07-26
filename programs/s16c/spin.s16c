@@ -13,7 +13,7 @@ static FRAMES: [u16; 4] = ['|', '/', '-', '\\'];
 
 fn main() {
     loop {
-        var frame: u16 = (time::tick() >> 3) & 3;   // new frame every 8 ticks, 4 frames
+        var frame: u16 = (time::tick() >> 1) & 3;   // new frame every 2 ticks, 4 frames
         screen::put(20, 12, FRAMES[frame], screen::GREEN);
         time::wait_next();
     }

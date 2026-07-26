@@ -6,7 +6,10 @@ fn tick() -> u16 {
 }
 
 // Block until the machine advances one tick: the frame pacer for game loops.
+// Parks the CPU (WAITTICK) rather than busy-polling TICK — TICK is written
+// once at the start of a tick and held fixed while the CPU runs, so a
+// software poll loop can never observe it change before the tick's whole
+// instruction budget is spent (D028).
 fn wait_next() {
-    var t: u16 = peek(0xFF04);
-    while peek(0xFF04) == t { }
+    wait_tick();
 }

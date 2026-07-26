@@ -75,6 +75,7 @@ pub enum Builtin {
     Halt,
     Brk,
     Wait,
+    WaitTick,
 }
 
 const BUILTINS: &[(&str, Builtin)] = &[
@@ -85,6 +86,7 @@ const BUILTINS: &[(&str, Builtin)] = &[
     ("halt", Builtin::Halt),
     ("brk", Builtin::Brk),
     ("wait", Builtin::Wait),
+    ("wait_tick", Builtin::WaitTick),
 ];
 
 // --- Environments -----------------------------------------------------------
@@ -723,7 +725,7 @@ impl FnCx<'_> {
             let (params, ret): (&[Scalar], Option<Scalar>) = match builtin {
                 Builtin::Peek | Builtin::Peek8 => (&[Scalar::U16], Some(Scalar::U16)),
                 Builtin::Poke | Builtin::Poke8 => (&[Scalar::U16, Scalar::U16], None),
-                Builtin::Halt | Builtin::Brk | Builtin::Wait => (&[], None),
+                Builtin::Halt | Builtin::Brk | Builtin::Wait | Builtin::WaitTick => (&[], None),
             };
             let params: Vec<ParamKind> = params.iter().copied().map(ParamKind::Value).collect();
             let targs = self.check_args(name, args, &params, pos)?;

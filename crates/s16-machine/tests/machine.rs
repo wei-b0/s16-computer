@@ -91,6 +91,32 @@ fn waiting_cpu_wakes_on_nonzero_input() {
 }
 
 #[test]
+fn waittick_stops_the_tick_before_the_budget_is_spent() {
+    let mut mem = load("LDI R1, #1\nWAITTICK\nLDI R2, #2\nHALT");
+    let mut machine = Machine::new(1);
+
+    let steps = machine.tick(&mut mem, 0, 1_000);
+    assert_eq!(steps, 2, "the tick stops right after WAITTICK, not at the budget");
+    assert_eq!(machine.cpu.state, State::WaitingTick);
+    assert_eq!(read16(&mem, mmio::STATUS), 5);
+}
+
+#[test]
+fn waitingtick_cpu_always_wakes_on_the_next_tick() {
+    let mut mem = load("WAITTICK\nLDI R1, #7\nHALT");
+    let mut machine = Machine::new(1);
+
+    assert_eq!(machine.tick(&mut mem, 0, 100), 1, "enters WaitingTick");
+    assert_eq!(machine.cpu.state, State::WaitingTick);
+
+    // No input at all — unlike WAIT, WAITTICK doesn't care.
+    let steps = machine.tick(&mut mem, 0, 100);
+    assert_eq!(machine.cpu.state, State::Halted, "the next tick wakes it unconditionally");
+    assert!(steps > 0);
+    assert_eq!(machine.cpu.regs[1], 7);
+}
+
+#[test]
 fn status_reflects_state_and_fault() {
     let mut mem = load("LDI R1, #3\nLDI R2, #0\nDIV R3, R1, R2");
     let mut machine = Machine::new(1);

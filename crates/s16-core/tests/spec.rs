@@ -337,3 +337,30 @@ fn waiting_cpu_does_not_step() {
     assert_eq!(cpu.regs, after_wait.regs);
     assert_eq!(cpu.state, State::Waiting);
 }
+
+#[test]
+fn waittick_stops_the_run_loop_immediately() {
+    let mut mem = memory(&[
+        i(LDI, 1, 0, 1),
+        r(WAITTICK, 0, 0, 0),
+        i(LDI, 2, 0, 0xDEAD), // never reached: the run loop stops at WAITTICK
+    ]);
+    let mut cpu = Cpu::new();
+    let steps = cpu.run(&mut mem, 100);
+    assert_eq!(steps, 2, "run() must not consume the rest of the budget past WAITTICK");
+    assert_eq!(cpu.state, State::WaitingTick);
+    assert_eq!(cpu.pc, 0x0008, "PC points past WAITTICK");
+    assert_eq!(cpu.regs[2], 0);
+}
+
+#[test]
+fn waitingtick_cpu_does_not_step() {
+    let mut mem = memory(&[r(WAITTICK, 0, 0, 0), i(LDI, 1, 0, 1)]);
+    let mut cpu = Cpu::new();
+    cpu.run(&mut mem, 100);
+    let after_wait = cpu.clone();
+    cpu.step(&mut mem);
+    assert_eq!(cpu.pc, after_wait.pc);
+    assert_eq!(cpu.regs, after_wait.regs);
+    assert_eq!(cpu.state, State::WaitingTick);
+}

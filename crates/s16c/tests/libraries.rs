@@ -127,14 +127,15 @@ fn main() {
 
 #[test]
 fn wait_next_blocks_for_exactly_one_tick() {
-    // A budget of 0 per real tick means wait_next() can only make progress
-    // by the TICK register itself advancing, proving it isn't a busy-loop
-    // that happens to finish within one CPU slice by luck.
+    // wait_next() parks the CPU (WAITTICK) rather than busy-polling TICK, so
+    // it costs ~0 instructions while idle and always resumes on the very
+    // next tick, regardless of how small the budget is.
     let mut mem = build("use time;\nfn main() { time::wait_next(); poke(0x8000, 1); halt(); }");
     let mut machine = Machine::new(1);
-    machine.tick(&mut mem, 0, 1_000); // ticks: 0 -> reads t=0, spins
-    assert_eq!(machine.cpu.state, State::Running);
-    machine.tick(&mut mem, 0, 1_000); // TICK becomes 1: loop exits
+    machine.tick(&mut mem, 0, 1_000); // runs up to WAITTICK, parks
+    assert_eq!(machine.cpu.state, State::WaitingTick);
+    assert_eq!(u16::from_le_bytes([mem[0x8000], mem[0x8001]]), 0, "not written yet");
+    machine.tick(&mut mem, 0, 1_000); // next tick wakes it unconditionally
     assert_eq!(machine.cpu.state, State::Halted);
     assert_eq!(u16::from_le_bytes([mem[0x8000], mem[0x8001]]), 1);
 }

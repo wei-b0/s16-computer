@@ -34,7 +34,8 @@ wasm-pack build crates/s16-wasm --target bundler --out-dir pkg-bundler
   - `.registers(): Uint16Array` (16 general-purpose registers)
   - `.pc()`, `.sp()`, `.flags()`, `.ticks()`: `number`
   - `.status(): number` — low byte = state (0 running, 1 halted, 2 debug
-    halt, 3 faulted), high byte = fault code when faulted.
+    halt, 3 faulted, 4 waiting for input, 5 waiting for next tick), high byte
+    = fault code when faulted.
   - `.debug_output(): string` — text the program wrote to the debug console
     this tick.
   - `.read_memory(addr, len): Uint8Array` / `.write_memory(addr, bytes)`
